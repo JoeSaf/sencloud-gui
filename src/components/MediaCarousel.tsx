@@ -36,13 +36,13 @@ const MediaCarousel: React.FC<MediaCarouselProps> = ({ title, items, onItemClick
   };
 
   return (
-    <div className="mb-12">
+    <div className="mb-8 sm:mb-12">
       {/* Section Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-foreground">{title}</h2>
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">{title}</h2>
         
-        {/* Navigation Controls */}
-        <div className="flex items-center gap-2">
+        {/* Navigation Controls - Hidden on mobile */}
+        <div className="hidden sm:flex items-center gap-2">
           <button
             onClick={() => scroll('left')}
             className="p-2 rounded-lg bg-accent hover:bg-accent/80 transition-colors"
@@ -65,7 +65,7 @@ const MediaCarousel: React.FC<MediaCarouselProps> = ({ title, items, onItemClick
         style={{ scrollSnapType: 'x mandatory' }}
       >
         {items.map((item) => (
-          <div key={item.id} className="flex-shrink-0" style={{ scrollSnapAlign: 'start' }}>
+          <div key={item.id} className="flex-shrink-0 w-48 sm:w-56 md:w-64" style={{ scrollSnapAlign: 'start' }}>
             <MediaCard
               title={item.title}
               image={item.image}

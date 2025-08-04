@@ -97,17 +97,17 @@ const Upload: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-4">Upload Media</h1>
-        <p className="text-lg text-muted-foreground">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-3 sm:mb-4">Upload Media</h1>
+        <p className="text-sm sm:text-base lg:text-lg text-muted-foreground px-4">
           Add your videos, images, and audio files to your media library
         </p>
       </div>
 
       {/* Upload Zone */}
       <div
-        className={`upload-zone mb-8 ${dragOver ? 'dragover' : ''}`}
+        className={`upload-zone mb-6 sm:mb-8 ${dragOver ? 'dragover' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -123,26 +123,26 @@ const Upload: React.FC = () => {
         />
         
         <div className="text-center">
-          <div className="w-16 h-16 primary-gradient rounded-full flex items-center justify-center mx-auto mb-4">
-            <UploadIcon className="w-8 h-8 text-primary-foreground" />
+          <div className="w-12 sm:w-16 h-12 sm:h-16 primary-gradient rounded-full flex items-center justify-center mx-auto mb-4">
+            <UploadIcon className="w-6 sm:w-8 h-6 sm:h-8 text-primary-foreground" />
           </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">
+          <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">
             Drop files here or click to browse
           </h3>
-          <p className="text-muted-foreground mb-4">
+          <p className="text-sm sm:text-base text-muted-foreground mb-4 px-4">
             Support for videos, images, and audio files up to 2GB each
           </p>
-          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
-              <Film className="w-4 h-4" />
+              <Film className="w-3 h-3 sm:w-4 sm:h-4" />
               Video
             </div>
             <div className="flex items-center gap-1">
-              <Image className="w-4 h-4" />
+              <Image className="w-3 h-3 sm:w-4 sm:h-4" />
               Image
             </div>
             <div className="flex items-center gap-1">
-              <Music className="w-4 h-4" />
+              <Music className="w-3 h-3 sm:w-4 sm:h-4" />
               Audio
             </div>
           </div>
@@ -151,27 +151,27 @@ const Upload: React.FC = () => {
 
       {/* File List */}
       {uploadedFiles.length > 0 && (
-        <div className="card-gradient rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">
+        <div className="card-gradient rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">
             Uploaded Files ({uploadedFiles.length})
           </h3>
           
           <div className="space-y-3">
             {uploadedFiles.map((file) => (
-              <div key={file.id} className="flex items-center gap-4 p-4 bg-accent/50 rounded-lg">
-                <div className="text-primary">
+              <div key={file.id} className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-accent/50 rounded-lg">
+                <div className="text-primary flex-shrink-0">
                   {getFileIcon(file.type)}
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground truncate">{file.name}</p>
-                  <p className="text-sm text-muted-foreground">{file.size}</p>
+                  <p className="font-medium text-foreground truncate text-sm sm:text-base">{file.name}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{file.size}</p>
                   
                   {file.status === 'uploading' && (
                     <div className="mt-2">
-                      <div className="w-full bg-muted rounded-full h-2">
+                      <div className="w-full bg-muted rounded-full h-1.5 sm:h-2">
                         <div 
-                          className="primary-gradient h-2 rounded-full transition-all duration-300"
+                          className="primary-gradient h-1.5 sm:h-2 rounded-full transition-all duration-300"
                           style={{ width: `${file.progress}%` }}
                         ></div>
                       </div>
@@ -182,10 +182,10 @@ const Upload: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   {file.status === 'completed' && (
-                    <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                     </div>
                   )}
                   
@@ -193,7 +193,7 @@ const Upload: React.FC = () => {
                     onClick={() => removeFile(file.id)}
                     className="p-1 rounded-full hover:bg-destructive/20 transition-colors"
                   >
-                    <X className="w-4 h-4 text-destructive" />
+                    <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-destructive" />
                   </button>
                 </div>
               </div>
