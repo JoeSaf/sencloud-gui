@@ -1,6 +1,9 @@
+// src/components/Layout.tsx
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Upload, Settings, User, LogOut, Search, Play } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -8,7 +11,26 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+      navigate('/login');
+    } catch (error) {
+      toast({
+        title: "Logout failed",
+        description: "There was an error logging out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (isAuthPage) {
     return <div className="min-h-screen hero-gradient">{children}</div>;
@@ -48,15 +70,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Upload className="w-3.5 h-3.5 lg:w-4 lg:h-4 mr-2" />
                 Upload
               </NavLink>
-              <NavLink
-                to="/admin"
-                className={({ isActive }) => 
-                  `nav-link text-sm lg:text-base ${isActive ? 'active' : ''}`
-                }
-              >
-                <Settings className="w-3.5 h-3.5 lg:w-4 lg:h-4 mr-2" />
-                Admin
-              </NavLink>
+              {user?.is_admin && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) => 
+                    `nav-link text-sm lg:text-base ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Settings className="w-3.5 h-3.5 lg:w-4 lg:h-4 mr-2" />
+                  Admin
+                </NavLink>
+              )}
             </div>
 
             {/* User Actions */}
@@ -64,19 +88,82 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <button className="p-1.5 sm:p-2 rounded-lg hover:bg-accent transition-colors">
                 <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               </button>
-              <button className="p-1.5 sm:p-2 rounded-lg hover:bg-accent transition-colors">
-                <User className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-              </button>
-              <button className="hidden sm:block p-1.5 sm:p-2 rounded-lg hover:bg-accent transition-colors">
-                <LogOut className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-              </button>
+              
+              {/* User Menu */}
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-accent/50 rounded-lg">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-foreground">{user?.username}</span>
+                </div>
+                
+                <button 
+                  onClick={handleLogout}
+                  className="p-1.5 sm:p-2 rounded-lg hover:bg-accent transition-colors"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
+      {/* Mobile Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50">
+        <div className="glass-effect border-t border-border/20 p-4">
+          <div className="flex items-center justify-around">
+            <NavLink
+              to="/"
+              className={({ isActive }) => 
+                `flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${
+                  isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+                }`
+              }
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-xs">Gallery</span>
+            </NavLink>
+            
+            <NavLink
+              to="/upload"
+              className={({ isActive }) => 
+                `flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${
+                  isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+                }`
+              }
+            >
+              <Upload className="w-5 h-5" />
+              <span className="text-xs">Upload</span>
+            </NavLink>
+            
+            {user?.is_admin && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) => 
+                  `flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${
+                    isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+                  }`
+                }
+              >
+                <Settings className="w-5 h-5" />
+                <span className="text-xs">Admin</span>
+              </NavLink>
+            )}
+            
+            <button 
+              onClick={handleLogout}
+              className="flex flex-col items-center gap-1 p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="text-xs">Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Main Content */}
-      <main className="relative">
+      <main className="relative pb-20 md:pb-0">
         {children}
       </main>
 

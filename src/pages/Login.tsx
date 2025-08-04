@@ -1,18 +1,64 @@
+// src/pages/Login.tsx
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, EyeOff, Play } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Eye, EyeOff, Play, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
 const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Redirect to intended page after login
+  const from = location.state?.from?.pathname || '/';
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login attempt:', formData);
-    // Handle login logic here
+    
+    if (!formData.username || !formData.password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const success = await login(formData.username, formData.password);
+      
+      if (success) {
+        toast({
+          title: "Login Successful",
+          description: "Welcome back to MediaServer!",
+        });
+        navigate(from, { replace: true });
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid username or password. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Login Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -20,6 +66,13 @@ const Login: React.FC = () => {
       ...prev,
       [e.target.name]: e.target.value
     }));
+  };
+
+  const handleDemoLogin = () => {
+    setFormData({
+      username: 'admin',
+      password: 'admin123'
+    });
   };
 
   return (
@@ -38,18 +91,19 @@ const Login: React.FC = () => {
         <div className="glass-effect rounded-xl p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
-                Email
+              <label htmlFor="username" className="block text-sm font-medium text-foreground mb-2">
+                Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="username"
+                name="username"
+                type="text"
                 required
-                value={formData.email}
+                value={formData.username}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="Enter your email"
+                placeholder="Enter your username"
+                disabled={isLoading}
               />
             </div>
 
@@ -67,11 +121,13 @@ const Login: React.FC = () => {
                   onChange={handleChange}
                   className="input-field pr-12"
                   placeholder="Enter your password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -80,23 +136,42 @@ const Login: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <label className="flex items-center">
-                <input type="checkbox" className="rounded mr-2" />
+                <input type="checkbox" className="rounded mr-2" disabled={isLoading} />
                 <span className="text-sm text-muted-foreground">Remember me</span>
               </label>
-              <Link to="#" className="text-sm text-primary hover:text-primary/80 transition-colors">
+              <Link 
+                to="#" 
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+                tabIndex={isLoading ? -1 : 0}
+              >
                 Forgot password?
               </Link>
             </div>
 
-            <button type="submit" className="btn-primary w-full">
-              Sign In
+            <button 
+              type="submit" 
+              className="btn-primary w-full flex items-center justify-center gap-2"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-muted-foreground">
               Don't have an account?{' '}
-              <Link to="/register" className="text-primary hover:text-primary/80 transition-colors">
+              <Link 
+                to="/register" 
+                className="text-primary hover:text-primary/80 transition-colors"
+                tabIndex={isLoading ? -1 : 0}
+              >
                 Sign up
               </Link>
             </p>
@@ -105,9 +180,20 @@ const Login: React.FC = () => {
 
         {/* Demo Credentials */}
         <div className="mt-6 p-4 bg-accent/20 rounded-lg border border-border/20">
-          <p className="text-sm text-muted-foreground text-center">
-            <strong>Demo:</strong> admin@mediaserver.com / password123
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                <strong>Demo:</strong> admin / admin123
+              </p>
+            </div>
+            <button
+              onClick={handleDemoLogin}
+              className="text-xs text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded border border-primary/20 hover:bg-primary/10"
+              disabled={isLoading}
+            >
+              Use Demo
+            </button>
+          </div>
         </div>
       </div>
     </div>

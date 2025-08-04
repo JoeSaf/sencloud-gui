@@ -1,26 +1,85 @@
+// src/pages/Register.tsx
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, EyeOff, Play } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, Play, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
 const Register: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+    username: '',
     password: '',
-    confirmPassword: ''
+    confirm_password: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { register } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+    
+    // Validation
+    if (!formData.username || !formData.password || !formData.confirm_password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
       return;
     }
-    console.log('Register attempt:', formData);
-    // Handle registration logic here
+
+    if (formData.password !== formData.confirm_password) {
+      toast({
+        title: "Validation Error",
+        description: "Passwords do not match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast({
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const success = await register({
+        username: formData.username,
+        password: formData.password,
+        confirm_password: formData.confirm_password,
+      });
+      
+      if (success) {
+        toast({
+          title: "Registration Successful",
+          description: "Your account has been created. Please sign in.",
+        });
+        navigate('/login');
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: "Username may already exist or there was an error. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Registration Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,52 +104,20 @@ const Register: React.FC = () => {
         {/* Registration Form */}
         <div className="glass-effect rounded-xl p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-foreground mb-2">
-                  First Name
-                </label>
-                <input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  required
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  className="input-field"
-                  placeholder="John"
-                />
-              </div>
-              <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-foreground mb-2">
-                  Last Name
-                </label>
-                <input
-                  id="lastName"
-                  name="lastName"
-                  type="text"
-                  required
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  className="input-field"
-                  placeholder="Doe"
-                />
-              </div>
-            </div>
-
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
-                Email
+              <label htmlFor="username" className="block text-sm font-medium text-foreground mb-2">
+                Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="username"
+                name="username"
+                type="text"
                 required
-                value={formData.email}
+                value={formData.username}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="john.doe@example.com"
+                placeholder="Choose a username"
+                disabled={isLoading}
               />
             </div>
 
@@ -108,36 +135,43 @@ const Register: React.FC = () => {
                   onChange={handleChange}
                   className="input-field pr-12"
                   placeholder="Create a strong password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Must be at least 6 characters long
+              </p>
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="confirm_password" className="block text-sm font-medium text-foreground mb-2">
                 Confirm Password
               </label>
               <div className="relative">
                 <input
-                  id="confirmPassword"
-                  name="confirmPassword"
+                  id="confirm_password"
+                  name="confirm_password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   required
-                  value={formData.confirmPassword}
+                  value={formData.confirm_password}
                   onChange={handleChange}
                   className="input-field pr-12"
                   placeholder="Confirm your password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={isLoading}
                 >
                   {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -146,7 +180,12 @@ const Register: React.FC = () => {
 
             <div>
               <label className="flex items-start gap-2">
-                <input type="checkbox" required className="rounded mt-1" />
+                <input 
+                  type="checkbox" 
+                  required 
+                  className="rounded mt-1" 
+                  disabled={isLoading}
+                />
                 <span className="text-sm text-muted-foreground">
                   I agree to the{' '}
                   <Link to="#" className="text-primary hover:text-primary/80 transition-colors">
@@ -160,22 +199,37 @@ const Register: React.FC = () => {
               </label>
             </div>
 
-            <button type="submit" className="btn-primary w-full">
-              Create Account
+            <button 
+              type="submit" 
+              className="btn-primary w-full flex items-center justify-center gap-2"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                'Create Account'
+              )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-muted-foreground">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:text-primary/80 transition-colors">
+              <Link 
+                to="/login" 
+                className="text-primary hover:text-primary/80 transition-colors"
+                tabIndex={isLoading ? -1 : 0}
+              >
                 Sign in
               </Link>
             </p>
           </div>
         </div>
       </div>
-    </div>
+    </div>  
   );
 };
 
