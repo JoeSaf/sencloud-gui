@@ -1,4 +1,4 @@
-// src/services/api.ts
+// src/services/api.ts - Updated with search functionality
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -34,6 +34,21 @@ export interface User {
   id: string;
   username: string;
   is_admin: boolean;
+}
+
+export interface SearchParams {
+  query?: string;
+  type?: string;
+  folder?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UploadProgress {
+  filename: string;
+  progress: number;
+  status: 'uploading' | 'processing' | 'completed' | 'error';
+  error?: string;
 }
 
 class ApiService {
@@ -220,6 +235,18 @@ class ApiService {
     return this.request(`/api/files?${searchParams.toString()}`);
   }
 
+  // Search functionality
+  async searchFiles(params: SearchParams): Promise<ApiResponse<MediaFile[]>> {
+    const searchParams = new URLSearchParams();
+    if (params.query) searchParams.append('text', params.query);
+    if (params.type) searchParams.append('type', params.type);
+    if (params.folder) searchParams.append('folder', params.folder);
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+    if (params.offset) searchParams.append('offset', params.offset.toString());
+
+    return this.request(`/api/search?${searchParams.toString()}`);
+  }
+
   async getFolders(params?: {
     type?: string;
     flat?: boolean;
@@ -279,6 +306,49 @@ class ApiService {
     });
   }
 
+  async uploadMultipleFiles(
+    files: File[],
+    folder?: string,
+    onProgress?: (filename: string, progress: number) => void,
+    onFileComplete?: (filename: string, success: boolean, error?: string) => void
+  ): Promise<ApiResponse<{ successful: number; failed: number; errors: string[] }>> {
+    const results = {
+      successful: 0,
+      failed: 0,
+      errors: [] as string[]
+    };
+
+    for (const file of files) {
+      try {
+        const response = await this.uploadFile(
+          file,
+          folder,
+          (progress) => onProgress?.(file.name, progress)
+        );
+
+        if (response.success) {
+          results.successful++;
+          onFileComplete?.(file.name, true);
+        } else {
+          results.failed++;
+          const error = response.error || 'Upload failed';
+          results.errors.push(`${file.name}: ${error}`);
+          onFileComplete?.(file.name, false, error);
+        }
+      } catch (error) {
+        results.failed++;
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        results.errors.push(`${file.name}: ${errorMessage}`);
+        onFileComplete?.(file.name, false, errorMessage);
+      }
+    }
+
+    return {
+      success: results.successful > 0,
+      data: results,
+    };
+  }
+
   async deleteFile(filename: string): Promise<ApiResponse> {
     return this.request(`/api/delete/${encodeURIComponent(filename)}`, {
       method: 'DELETE',
@@ -291,6 +361,17 @@ class ApiService {
       body: JSON.stringify({
         folder_path: folderPath,
         file_type: fileType,
+      }),
+    });
+  }
+
+  async moveFiles(filePaths: string[], destinationFolder: string, destinationType: string): Promise<ApiResponse> {
+    return this.request('/api/move-files', {
+      method: 'POST',
+      body: JSON.stringify({
+        file_paths: filePaths,
+        destination_folder: destinationFolder,
+        destination_type: destinationType,
       }),
     });
   }
@@ -331,6 +412,18 @@ class ApiService {
     });
   }
 
+  // Batch operations
+  async batchDelete(filenames: string[]): Promise<ApiResponse> {
+    return this.request('/api/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ filenames }),
+    });
+  }
+
+  async getUploadStatus(): Promise<ApiResponse<UploadProgress[]>> {
+    return this.request('/api/upload-status');
+  }
+
   // Utility
   getAuthStatus(): boolean {
     return this.isAuthenticated;
@@ -342,6 +435,55 @@ class ApiService {
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // File type detection
+  getFileCategory(filename: string): 'image' | 'video' | 'audio' | 'document' | 'code' | 'archive' {
+    const extension = filename.split('.').pop()?.toLowerCase() || '';
+
+    const categories = {
+      image: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'svg', 'ico'],
+      video: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpg', 'mpeg', '3gp', 'ogv'],
+      audio: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus'],
+      document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'md', 'csv', 'odt', 'ods', 'odp'],
+      code: ['py', 'js', 'ts', 'html', 'css', 'json', 'xml', 'yaml', 'yml', 'sh', 'php', 'java', 'cpp', 'h', 'sql'],
+      archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tbz2', 'txz']
+    };
+
+    for (const [category, extensions] of Object.entries(categories)) {
+      if (extensions.includes(extension)) {
+        return category as any;
+      }
+    }
+
+    return 'document'; // Default fallback
+  }
+
+  // Cache management
+  clearCache(): void {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('authCheckTime');
+    localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
+  }
+
+  // Health check
+  async healthCheck(): Promise<ApiResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/health`, {
+        credentials: 'include',
+      });
+      return {
+        success: response.ok,
+        data: response.ok ? { status: 'healthy' } : null,
+        error: response.ok ? undefined : 'Service unavailable',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Health check failed',
+      };
+    }
   }
 }
 

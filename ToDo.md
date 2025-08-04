@@ -1,0 +1,8 @@
+- the gallery components ui consistency needs to be affirmed
+- the admin page and admin protocols need to be implemented so that its invincible to the normal user and implement it 
+- when i try to visit the folder pages i get a 404, i think a page needs to be implemented so that each folder when opened open a nested component displaying the components as implemented
+- proper search page implementation to ensure consistency
+- the browse library button when clicked will scroll down to the media
+- in the playing media window, like how netflix gives the next option and media controls and so it should be here
+- create a nav bar for the responsiveness of the site so that it suites the matching
+- 
