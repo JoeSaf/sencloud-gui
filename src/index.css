@@ -2,41 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Apple TV-inspired Design System - Cinematic and Modern */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Dark cinematic background */
+    --background: 220 15% 8%;
+    --foreground: 210 20% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Card backgrounds with subtle transparency */
+    --card: 220 15% 12%;
+    --card-foreground: 210 20% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Popover styling */
+    --popover: 220 15% 10%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Apple TV blue accent */
+    --primary: 211 100% 60%;
+    --primary-foreground: 220 15% 8%;
+    --primary-glow: 211 100% 70%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Subtle secondary tones */
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 20% 85%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted tones for less important content */
+    --muted: 220 15% 15%;
+    --muted-foreground: 215 10% 60%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent colors */
+    --accent: 220 15% 20%;
+    --accent-foreground: 210 20% 90%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive red */
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 210 20% 95%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders and inputs */
+    --border: 220 15% 25%;
+    --input: 220 15% 15%;
+    --ring: 211 100% 60%;
 
-    --radius: 0.5rem;
+    /* Border radius for Apple TV feel */
+    --radius: 0.75rem;
+
+    /* Custom gradients for cinematic feel */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-hero: linear-gradient(180deg, hsl(220 15% 8%) 0%, hsl(220 15% 12%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(220 15% 12%) 0%, hsl(220 15% 15%) 100%);
+    
+    /* Shadows with cinematic glow */
+    --shadow-elegant: 0 10px 40px -10px hsl(220 15% 5% / 0.8);
+    --shadow-glow: 0 0 30px hsl(var(--primary) / 0.3);
+    --shadow-card: 0 8px 32px hsl(220 15% 5% / 0.6);
+
+    /* Smooth transitions */
+    --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
     --sidebar-background: 0 0% 98%;
 
@@ -101,5 +124,100 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  }
+}
+
+@layer components {
+  /* Apple TV-style components */
+  .media-card {
+    @apply relative rounded-xl overflow-hidden cursor-pointer;
+    @apply transition-all duration-300 ease-out;
+    @apply hover:scale-110 hover:z-10;
+    background: linear-gradient(135deg, hsl(var(--card)), hsl(var(--accent)));
+    box-shadow: var(--shadow-card);
+  }
+
+  .media-card:hover {
+    box-shadow: var(--shadow-glow), var(--shadow-elegant);
+  }
+
+  .hero-gradient {
+    background: var(--gradient-hero);
+  }
+
+  .card-gradient {
+    background: var(--gradient-card);
+  }
+
+  .primary-gradient {
+    background: var(--gradient-primary);
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-xl;
+    background: hsl(var(--card) / 0.8);
+    border: 1px solid hsl(var(--border) / 0.2);
+  }
+
+  .carousel-container {
+    @apply flex gap-6 overflow-x-auto scrollbar-hide;
+    scroll-behavior: smooth;
+    padding-bottom: 20px;
+  }
+
+  .carousel-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  .nav-link {
+    @apply relative px-4 py-2 rounded-lg transition-all duration-300;
+    @apply hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .nav-link.active {
+    @apply bg-primary text-primary-foreground;
+    box-shadow: var(--shadow-glow);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-medium transition-all duration-300;
+    background: var(--gradient-primary);
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(var(--primary) / 0.5);
+  }
+
+  .btn-primary:hover {
+    @apply scale-105;
+    box-shadow: var(--shadow-glow);
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-medium transition-all duration-300;
+    @apply bg-secondary text-secondary-foreground border border-border;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-accent scale-105;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl transition-all duration-300;
+    @apply bg-input border border-border text-foreground;
+    @apply focus:ring-2 focus:ring-primary focus:border-transparent;
+  }
+
+  .upload-zone {
+    @apply border-2 border-dashed border-border rounded-xl p-8;
+    @apply bg-card/50 hover:bg-card transition-all duration-300;
+    @apply hover:border-primary;
+  }
+
+  .upload-zone.dragover {
+    @apply border-primary bg-primary/10;
   }
 }
