@@ -136,8 +136,8 @@ const Gallery: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Loading your media library...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading your media library...</p>
         </div>
       </div>
     );
@@ -147,16 +147,16 @@ const Gallery: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md">
-          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">
             Failed to Load Media
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="text-muted-foreground mb-4">
             There was an error loading your media library. Please try again.
           </p>
           <button 
             onClick={handleRefresh} 
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="btn-primary"
           >
             Retry
           </button>
@@ -171,7 +171,7 @@ const Gallery: React.FC = () => {
     .slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <div 
         className="relative h-[50vh] sm:h-[60vh] lg:h-[70vh] flex items-center justify-center bg-cover bg-center"
@@ -196,7 +196,7 @@ const Gallery: React.FC = () => {
             {featuredMedia && (
               <button 
                 onClick={handleFeaturedPlay}
-                className="flex items-center gap-2 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="btn-primary flex items-center gap-2 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto"
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5" />
                 Play Now
@@ -225,8 +225,8 @@ const Gallery: React.FC = () => {
         {Object.entries(mediaByDirectory).map(([directory, typeGroups]) => (
           <div key={directory} className="mb-8 sm:mb-12">
             <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
+                <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 {directory === 'Root' ? 'Root Directory' : directory}
               </h2>
             </div>
@@ -235,17 +235,17 @@ const Gallery: React.FC = () => {
             {Object.entries(typeGroups).map(([type, items]) => (
               <div key={`${directory}-${type}`} className="mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white capitalize flex items-center gap-2">
-                    {type === 'video' && <Play className="w-4 h-4" />}
-                    {type === 'audio' && <span className="w-4 h-4 text-center">♫</span>}
-                    {type === 'image' && <span className="w-4 h-4 text-center">🖼</span>}
+                  <h3 className="text-lg font-semibold text-foreground capitalize flex items-center gap-2">
+                    {type === 'video' && <Play className="w-4 h-4 text-primary" />}
+                    {type === 'audio' && <span className="w-4 h-4 text-center text-primary">♫</span>}
+                    {type === 'image' && <span className="w-4 h-4 text-center text-primary">🖼</span>}
                     {type}s ({items.length})
                   </h3>
                   
                   {items.length > 6 && (
                     <Link
                       to={`/browse/${type}?folder=${encodeURIComponent(directory === 'Root' ? '' : directory)}`}
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors text-sm"
+                      className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors text-sm"
                     >
                       View All
                       <ChevronRight className="w-4 h-4" />
@@ -258,10 +258,10 @@ const Gallery: React.FC = () => {
                   {items.slice(0, 6).map((item) => (
                     <div
                       key={item.id}
-                      className="group cursor-pointer bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden"
+                      className="media-card group cursor-pointer"
                       onClick={() => handleItemClick(item)}
                     >
-                      <div className="relative aspect-[2/3] overflow-hidden">
+                      <div className="relative aspect-[2/3] overflow-hidden rounded-xl">
                         <img
                           src={item.image}
                           alt={item.title}
@@ -270,26 +270,27 @@ const Gallery: React.FC = () => {
                         />
                         
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                          <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 delay-100">
-                            <Play className="w-5 h-5 text-white ml-1" />
+                          <div className="w-12 h-12 primary-gradient rounded-full flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 delay-100">
+                            <Play className="w-5 h-5 text-primary-foreground ml-1" />
                           </div>
                         </div>
 
                         {item.duration && item.duration !== 'Unknown' && (
-                          <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 rounded-lg text-xs text-white">
+                          <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 rounded-lg text-xs text-white flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 text-center">⏱</span>
                             {item.duration}
                           </div>
                         )}
                       </div>
 
                       <div className="p-3">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-2 group-hover:text-blue-600 transition-colors text-sm">
+                        <h3 className="font-semibold text-foreground mb-1 line-clamp-2 group-hover:text-primary transition-colors text-sm">
                           {item.title}
                         </h3>
-                        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>{item.year}</span>
                           {item.genre && (
-                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-md">
+                            <span className="px-1.5 py-0.5 bg-accent rounded-md">
                               {item.genre}
                             </span>
                           )}
@@ -304,7 +305,7 @@ const Gallery: React.FC = () => {
                   <div className="mt-4 text-center">
                     <Link
                       to={`/browse/${type}?folder=${encodeURIComponent(directory === 'Root' ? '' : directory)}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-sm"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/80 rounded-lg transition-colors text-sm"
                     >
                       View All {items.length} {type}s
                       <ChevronRight className="w-4 h-4" />
@@ -319,18 +320,18 @@ const Gallery: React.FC = () => {
         {/* Empty State */}
         {Object.keys(mediaByDirectory).length === 0 && (
           <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Play className="w-8 h-8 text-gray-600 dark:text-gray-400" />
+            <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
+              <Play className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            <h3 className="text-xl font-semibold text-foreground mb-2">
               No Media Found
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
+            <p className="text-muted-foreground mb-6">
               Start building your library by uploading some media files.
             </p>
             <Link 
               to="/upload" 
-              className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="btn-primary"
             >
               Upload Media
             </Link>
