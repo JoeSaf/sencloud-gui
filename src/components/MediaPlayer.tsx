@@ -1,6 +1,6 @@
 // src/components/MediaPlayer.tsx
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Play, Pause, Volume2, VolumeX, Maximize2, SkipBack, SkipForward, Download } from 'lucide-react';
+import { X, Play, Pause, Volume2, VolumeX, Maximize2, SkipBack, SkipForward, Download, ChevronRight, Plus, ThumbsUp, ThumbsDown, Info } from 'lucide-react';
 
 interface MediaPlayerProps {
   isOpen: boolean;
@@ -15,9 +15,39 @@ interface MediaPlayerProps {
     type?: string;
     url?: string;
   } | null;
+  nextEpisode?: {
+    id?: string;
+    title: string;
+    image: string;
+    duration?: string;
+    year?: string;
+    genre?: string;
+    type?: string;
+    url?: string;
+  } | null;
+  onNextEpisode?: () => void;
+  recommendedMedia?: Array<{
+    id?: string;
+    title: string;
+    image: string;
+    duration?: string;
+    year?: string;
+    genre?: string;
+    type?: string;
+    url?: string;
+  }>;
+  onRecommendedSelect?: (media: any) => void;
 }
 
-const MediaPlayer: React.FC<MediaPlayerProps> = ({ isOpen, onClose, media }) => {
+const MediaPlayer: React.FC<MediaPlayerProps> = ({ 
+  isOpen, 
+  onClose, 
+  media, 
+  nextEpisode, 
+  onNextEpisode,
+  recommendedMedia = [],
+  onRecommendedSelect 
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +58,8 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ isOpen, onClose, media }) => 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showNextEpisode, setShowNextEpisode] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
 
   const mediaRef = media?.type === 'video' ? videoRef : audioRef;
 
@@ -100,6 +132,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ isOpen, onClose, media }) => 
 
     const handleEnded = () => {
       setIsPlaying(false);
+      if (nextEpisode) {
+        setShowNextEpisode(true);
+      } else if (recommendedMedia.length > 0) {
+        setShowRecommendations(true);
+      }
     };
 
     const handlePlay = () => setIsPlaying(true);
@@ -271,6 +308,127 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ isOpen, onClose, media }) => 
               </div>
             )}
 
+            {/* Next Episode Overlay */}
+            {showNextEpisode && nextEpisode && (
+              <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                <div className="bg-background/95 backdrop-blur-sm rounded-lg p-6 max-w-md mx-4 text-center">
+                  <h3 className="text-xl font-semibold mb-2">Up Next</h3>
+                  <img 
+                    src={nextEpisode.image} 
+                    alt={nextEpisode.title}
+                    className="w-full h-32 object-cover rounded-lg mb-4"
+                  />
+                  <h4 className="text-lg font-medium mb-2">{nextEpisode.title}</h4>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowNextEpisode(false);
+                        onNextEpisode?.();
+                      }}
+                      className="flex-1 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                    >
+                      Play Next Episode
+                    </button>
+                    <button
+                      onClick={() => setShowNextEpisode(false)}
+                      className="px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations Overlay */}
+            {showRecommendations && recommendedMedia.length > 0 && (
+              <div className="absolute inset-0 bg-black/80 flex items-center justify-center overflow-y-auto">
+                <div className="bg-background/95 backdrop-blur-sm rounded-lg p-6 max-w-4xl mx-4 max-h-[80vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-semibold">More Like This</h3>
+                    <button
+                      onClick={() => setShowRecommendations(false)}
+                      className="p-2 hover:bg-accent rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {recommendedMedia.slice(0, 8).map((item, index) => (
+                      <div 
+                        key={item.id || index}
+                        className="group cursor-pointer"
+                        onClick={() => {
+                          setShowRecommendations(false);
+                          onRecommendedSelect?.(item);
+                        }}
+                      >
+                        <div className="relative overflow-hidden rounded-lg mb-2">
+                          <img 
+                            src={item.image} 
+                            alt={item.title}
+                            className="w-full h-32 object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                            <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        <h4 className="text-sm font-medium line-clamp-2">{item.title}</h4>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                          {item.year && <span>{item.year}</span>}
+                          {item.duration && <span>{item.duration}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Netflix-style top overlay with action buttons */}
+            {!isFullscreen && (
+              <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-4 sm:p-6">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">{media.title}</h1>
+                    <div className="flex items-center gap-3">
+                      {media.year && <span className="text-white/80 text-sm">{media.year}</span>}
+                      {media.genre && <span className="text-white/80 text-sm">{media.genre}</span>}
+                      {media.duration && <span className="text-white/80 text-sm">{media.duration}</span>}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button 
+                      className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+                      title="Add to List"
+                    >
+                      <Plus className="w-5 h-5 text-white" />
+                    </button>
+                    <button 
+                      className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+                      title="Like"
+                    >
+                      <ThumbsUp className="w-5 h-5 text-white" />
+                    </button>
+                    <button 
+                      className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+                      title="Dislike"
+                    >
+                      <ThumbsDown className="w-5 h-5 text-white" />
+                    </button>
+                    <button 
+                      onClick={() => setShowRecommendations(true)}
+                      className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+                      title="More Info"
+                    >
+                      <Info className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Controls Overlay - Only for video and audio */}
             {(isVideo || isAudio) && (
               <div 
@@ -381,18 +539,46 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ isOpen, onClose, media }) => 
             )}
           </div>
 
-          {/* Media Info */}
+          {/* Media Info and Actions */}
           <div className="text-white px-2">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">{media.title}</h2>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm sm:text-base text-white/70">
-              {media.year && <span>{media.year}</span>}
-              {media.duration && <span>{media.duration}</span>}
-              {media.genre && <span>{media.genre}</span>}
-              {media.type && (
-                <span className="px-2 py-1 bg-primary/20 rounded-md text-primary text-xs uppercase">
-                  {media.type}
-                </span>
-              )}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">{media.title}</h2>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm sm:text-base text-white/70">
+                  {media.year && <span>{media.year}</span>}
+                  {media.duration && <span>{media.duration}</span>}
+                  {media.genre && <span>{media.genre}</span>}
+                  {media.type && (
+                    <span className="px-2 py-1 bg-primary/20 rounded-md text-primary text-xs uppercase">
+                      {media.type}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                {nextEpisode && (
+                  <button
+                    onClick={() => {
+                      setShowNextEpisode(false);
+                      onNextEpisode?.();
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <span>Next Episode</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+                {recommendedMedia.length > 0 && (
+                  <button
+                    onClick={() => setShowRecommendations(true)}
+                    className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition-colors"
+                  >
+                    More Like This
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

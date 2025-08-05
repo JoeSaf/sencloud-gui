@@ -118,6 +118,42 @@ const Gallery: React.FC = () => {
     setIsPlayerOpen(true);
   };
 
+  // Get next episode (sample logic - finds next item in same folder/genre)
+  const getNextEpisode = (currentItem: MediaItem | null) => {
+    if (!currentItem) return null;
+    
+    const sameTypeMedia = allMedia.filter(item => 
+      item.type === currentItem.type && 
+      item.genre === currentItem.genre &&
+      item.id !== currentItem.id
+    );
+    
+    return sameTypeMedia.length > 0 ? sameTypeMedia[0] : null;
+  };
+
+  // Get recommended media (sample logic - similar type/genre)
+  const getRecommendedMedia = (currentItem: MediaItem | null) => {
+    if (!currentItem) return [];
+    
+    return allMedia
+      .filter(item => 
+        item.id !== currentItem.id && 
+        (item.type === currentItem.type || item.genre === currentItem.genre)
+      )
+      .slice(0, 8);
+  };
+
+  const handleNextEpisode = () => {
+    const nextEpisode = getNextEpisode(selectedMedia);
+    if (nextEpisode) {
+      handleItemClick(nextEpisode);
+    }
+  };
+
+  const handleRecommendedSelect = (item: MediaItem) => {
+    handleItemClick(item);
+  };
+
   const handleFeaturedPlay = () => {
     if (featuredMedia) {
       handleItemClick(featuredMedia);
@@ -344,6 +380,10 @@ const Gallery: React.FC = () => {
         isOpen={isPlayerOpen}
         onClose={() => setIsPlayerOpen(false)}
         media={selectedMedia}
+        nextEpisode={getNextEpisode(selectedMedia)}
+        onNextEpisode={handleNextEpisode}
+        recommendedMedia={getRecommendedMedia(selectedMedia)}
+        onRecommendedSelect={handleRecommendedSelect}
       />
     </div>
   );
