@@ -98,7 +98,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       // For mobile devices, request screen orientation lock to landscape
       if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
         try {
-          await window.screen.orientation.lock('landscape');
+          // Type assertion for orientation lock which may not be in all TypeScript definitions
+          const orientation = window.screen.orientation as any;
+          if (orientation.lock) {
+            await orientation.lock('landscape');
+          }
         } catch (error) {
           console.log('Screen orientation lock not supported or failed:', error);
         }
