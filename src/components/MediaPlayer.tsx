@@ -153,6 +153,76 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
+  // Media control functions
+  const togglePlayPause = useCallback(() => {
+    if (!mediaRef.current) return;
+    if (isPlaying) {
+      mediaRef.current.pause();
+    } else {
+      const playPromise = mediaRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log('Play failed:', error);
+        });
+      }
+    }
+  }, [isPlaying, mediaRef]);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted(!isMuted);
+  }, [isMuted]);
+
+  const adjustVolume = useCallback((delta: number) => {
+    const newVolume = Math.max(0, Math.min(100, volume + delta));
+    setVolume(newVolume);
+    setIsMuted(false);
+  }, [volume]);
+
+  const skipTime = useCallback((seconds: number) => {
+    if (!mediaRef.current || duration === 0) return;
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    mediaRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  }, [mediaRef, duration, currentTime]);
+
+  const enterFullscreen = useCallback(async () => {
+    if (!playerContainerRef.current) return;
+    
+    try {
+      // For mobile devices, request screen orientation lock to landscape
+      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
+        try {
+          const orientation = window.screen.orientation as any;
+          if (orientation.lock) {
+            await orientation.lock('landscape');
+          }
+        } catch (error) {
+          console.log('Screen orientation lock failed:', error);
+        }
+      }
+      
+      await playerContainerRef.current.requestFullscreen();
+    } catch (error) {
+      console.log('Fullscreen request failed:', error);
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!playerContainerRef.current) return;
+
+    if (document.fullscreenElement) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }, [exitFullscreen, enterFullscreen]);
+
   // Improved close functionality
   const handleClose = useCallback(() => {
     // Clear any timeouts
@@ -249,7 +319,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   }, [
     isOpen, 
     playbackRate, 
-    handleClose
+    handleClose,
+    togglePlayPause,
+    skipTime,
+    adjustVolume,
+    toggleFullscreen,
+    toggleMute
   ]);
 
   // Handle fullscreen change events
@@ -389,36 +464,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     hideControlsTimer();
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
-  const togglePlayPause = useCallback(() => {
-    if (!mediaRef.current) return;
-    if (isPlaying) {
-      mediaRef.current.pause();
-    } else {
-      const playPromise = mediaRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log('Play failed:', error);
-        });
-      }
-    }
-  }, [isPlaying, mediaRef]);
-
-  const toggleMute = useCallback(() => {
-    setIsMuted(!isMuted);
-  }, [isMuted]);
-
-  const adjustVolume = useCallback((delta: number) => {
-    const newVolume = Math.max(0, Math.min(100, volume + delta));
-    setVolume(newVolume);
-    setIsMuted(false);
-  }, [volume]);
-
-  const skipTime = useCallback((seconds: number) => {
-    if (!mediaRef.current || duration === 0) return;
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    mediaRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  }, [mediaRef, duration, currentTime]);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!mediaRef.current || duration === 0) return;
@@ -437,43 +482,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     setIsMuted(false);
   };
 
-  const toggleFullscreen = useCallback(() => {
-    if (!playerContainerRef.current) return;
-
-    if (document.fullscreenElement) {
-      exitFullscreen();
-    } else {
-      enterFullscreen();
-    }
-  }, []);
-
-  const enterFullscreen = useCallback(async () => {
-    if (!playerContainerRef.current) return;
-    
-    try {
-      // For mobile devices, request screen orientation lock to landscape
-      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
-        try {
-          const orientation = window.screen.orientation as any;
-          if (orientation.lock) {
-            await orientation.lock('landscape');
-          }
-        } catch (error) {
-          console.log('Screen orientation lock failed:', error);
-        }
-      }
-      
-      await playerContainerRef.current.requestFullscreen();
-    } catch (error) {
-      console.log('Fullscreen request failed:', error);
-    }
-  }, []);
-
-  const exitFullscreen = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    }
-  }, []);
 
   const changePlaybackRate = (rate: number) => {
     const clampedRate = Math.max(0.25, Math.min(2, rate));
@@ -502,7 +510,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   return (
     <div 
       ref={playerContainerRef}
-      className={`fixed inset-0 z-50 bg-black flex items-center justify-center`}
+      className={`fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden`}
       style={{ cursor: isFullscreen && !showControls ? 'none' : 'default' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -595,7 +603,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
           }`}
         >
           {/* Progress Bar */}
-          <div className="px-6 pt-8 pb-4">
+          <div className="px-4 sm:px-6 pt-6 sm:pt-8 pb-3 sm:pb-4">
             <div 
               className="w-full h-2 bg-white/20 rounded-full cursor-pointer group"
               onClick={handleSeek}
@@ -614,64 +622,64 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
           </div>
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button 
                 onClick={() => skipTime(-10)}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                 title="Rewind 10s"
               >
-                <Rewind className="w-6 h-6 text-white" />
+                <Rewind className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </button>
               
               <button 
                 onClick={togglePlayPause}
-                className="p-4 hover:bg-white/20 rounded-full transition-colors"
+                className="p-3 sm:p-4 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                 title={isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? (
-                  <Pause className="w-8 h-8 text-white" />
+                  <Pause className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 ) : (
-                  <Play className="w-8 h-8 text-white ml-1" />
+                  <Play className="w-6 h-6 sm:w-8 sm:h-8 text-white ml-0.5 sm:ml-1" />
                 )}
               </button>
               
               <button 
                 onClick={() => skipTime(10)}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                 title="Forward 10s"
               >
-                <FastForward className="w-6 h-6 text-white" />
+                <FastForward className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </button>
 
               {nextEpisode && (
                 <button
                   onClick={onNextEpisode}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors touch-manipulation"
                   title="Next Episode"
                 >
-                  <SkipForward className="w-5 h-5 text-white" />
-                  <span className="text-white text-sm">Next</span>
+                  <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                  <span className="text-white text-xs sm:text-sm hidden sm:inline">Next</span>
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {/* Volume Control */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <button 
                   onClick={toggleMute}
-                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                   title={isMuted ? "Unmute" : "Mute"}
                 >
                   {isMuted || volume === 0 ? (
-                    <VolumeX className="w-5 h-5 text-white" />
+                    <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   ) : (
-                    <Volume2 className="w-5 h-5 text-white" />
+                    <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   )}
                 </button>
                 <div 
-                  className="w-24 h-1 bg-white/30 rounded-full cursor-pointer group"
+                  className="w-16 sm:w-24 h-1 bg-white/30 rounded-full cursor-pointer group touch-manipulation hidden sm:block"
                   onClick={handleVolumeChange}
                 >
                   <div 
@@ -679,19 +687,19 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                     style={{ width: `${isMuted ? 0 : volume}%` }}
                   ></div>
                 </div>
-                <span className="text-white/70 text-sm w-8 text-right">
+                <span className="text-white/70 text-xs sm:text-sm w-6 sm:w-8 text-right hidden sm:inline">
                   {Math.round(isMuted ? 0 : volume)}
                 </span>
               </div>
 
               {/* Settings */}
-              <div className="relative">
+              <div className="relative hidden sm:block">
                 <button 
                   onClick={() => setShowSettings(!showSettings)}
-                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                   title="Settings"
                 >
-                  <Settings className="w-5 h-5 text-white" />
+                  <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </button>
                 
                 {showSettings && (
@@ -721,13 +729,13 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
               {/* Fullscreen */}
               <button 
                 onClick={toggleFullscreen}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
                 title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? (
-                  <Minimize2 className="w-5 h-5 text-white" />
+                  <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 ) : (
-                  <Maximize2 className="w-5 h-5 text-white" />
+                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 )}
               </button>
             </div>
