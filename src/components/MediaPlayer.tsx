@@ -239,7 +239,9 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
     
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
@@ -247,10 +249,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   }, [
     isOpen, 
     playbackRate, 
-    handleClose,
-    isPlaying,
-    volume,
-    isMuted
+    handleClose
   ]);
 
   // Handle fullscreen change events
@@ -274,14 +273,29 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [hideControlsTimer, controlsTimeout]);
 
-  // Reset state when modal opens/closes
+  // Reset state when modal opens/closes and auto-start playback
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && media) {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
       setShowControls(true);
       setHasStartedPlaying(false);
+      
+      // Auto-start playback after a short delay to ensure everything is loaded
+      const autoPlayTimer = setTimeout(() => {
+        if (mediaRef.current) {
+          const playPromise = mediaRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log('Auto-play failed:', error);
+              // Auto-play was prevented, user will need to click play
+            });
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(autoPlayTimer);
     } else {
       if (mediaRef.current) {
         mediaRef.current.pause();
@@ -293,7 +307,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         setControlsTimeout(null);
       }
     }
-  }, [isOpen, mediaRef, controlsTimeout]);
+  }, [isOpen, media, mediaRef, controlsTimeout]);
 
   // Handle media events
   useEffect(() => {
@@ -375,31 +389,36 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     hideControlsTimer();
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
-  const togglePlayPause = () => {
+  const togglePlayPause = useCallback(() => {
     if (!mediaRef.current) return;
     if (isPlaying) {
       mediaRef.current.pause();
     } else {
-      mediaRef.current.play();
+      const playPromise = mediaRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log('Play failed:', error);
+        });
+      }
     }
-  };
+  }, [isPlaying, mediaRef]);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     setIsMuted(!isMuted);
-  };
+  }, [isMuted]);
 
-  const adjustVolume = (delta: number) => {
+  const adjustVolume = useCallback((delta: number) => {
     const newVolume = Math.max(0, Math.min(100, volume + delta));
     setVolume(newVolume);
     setIsMuted(false);
-  };
+  }, [volume]);
 
-  const skipTime = (seconds: number) => {
+  const skipTime = useCallback((seconds: number) => {
     if (!mediaRef.current || duration === 0) return;
     const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
     mediaRef.current.currentTime = newTime;
     setCurrentTime(newTime);
-  };
+  }, [mediaRef, duration, currentTime]);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!mediaRef.current || duration === 0) return;
@@ -418,7 +437,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     setIsMuted(false);
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!playerContainerRef.current) return;
 
     if (document.fullscreenElement) {
@@ -426,19 +445,35 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     } else {
       enterFullscreen();
     }
-  };
+  }, []);
 
-  const enterFullscreen = () => {
-    if (playerContainerRef.current) {
-      playerContainerRef.current.requestFullscreen();
+  const enterFullscreen = useCallback(async () => {
+    if (!playerContainerRef.current) return;
+    
+    try {
+      // For mobile devices, request screen orientation lock to landscape
+      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
+        try {
+          const orientation = window.screen.orientation as any;
+          if (orientation.lock) {
+            await orientation.lock('landscape');
+          }
+        } catch (error) {
+          console.log('Screen orientation lock failed:', error);
+        }
+      }
+      
+      await playerContainerRef.current.requestFullscreen();
+    } catch (error) {
+      console.log('Fullscreen request failed:', error);
     }
-  };
+  }, []);
 
-  const exitFullscreen = () => {
+  const exitFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       document.exitFullscreen();
     }
-  };
+  }, []);
 
   const changePlaybackRate = (rate: number) => {
     const clampedRate = Math.max(0.25, Math.min(2, rate));
