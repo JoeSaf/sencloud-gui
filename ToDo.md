@@ -4,5 +4,6 @@
 - proper search page implementation to ensure consistency
 - the browse library button when clicked will scroll down to the media
 - in the playing media window, like how netflix gives the next option and media controls and so it should be here
-- create a nav bar for the responsiveness of the site so that it suites the matching
-- 
+- create a nav bar for the responsiveness of the site so that it suites the matching when in mobile mode
+- when i try to login from another device in the network, it fails,fix this
+- the backend app.py is in here for any references needed
