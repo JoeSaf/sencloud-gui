@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, abort, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, abort, Response, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from PIL import Image, ImageOps
 from flask_cors import CORS
@@ -78,10 +78,16 @@ app.config.update(
     SESSION_PERMANENT=True,  # Make sessions permanent
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # Session lasts 7 days
     SESSION_COOKIE_DOMAIN=None,  # Allow cookies on any domain/IP in network
+    SESSION_COOKIE_PATH='/', 
 )
 
 # Enable CORS with credentials support
-CORS(app, supports_credentials=True, origins=['*'])
+CORS(app, 
+     supports_credentials=True, 
+     origins=['*'],  # Or specify your network IPs like ['http://192.168.1.100:3000', 'http://192.168.1.101:3000']
+     allow_headers=['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+)
 
 # Flask-Login setup
 login_manager = LoginManager()
@@ -677,12 +683,13 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username') or request.json.get('username')
+        password = request.form.get('password') or request.json.get('password')
         
         print(f"Login attempt for user: {username}")
         print(f"Request IP: {request.remote_addr}")
-        print(f"User Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        print(f"Content-Type: {request.headers.get('Content-Type')}")
+        print(f"Origin: {request.headers.get('Origin', 'No Origin')}")
         
         user = user_manager.verify_password(username, password)
         if user:
@@ -703,8 +710,9 @@ def login():
             print(f"Login successful for {username}")
             print(f"Session ID: {session.get('_id', 'No session ID')}")
             
-            # Handle both form submissions and API calls
-            if request.headers.get('Content-Type') == 'application/json':
+            # Handle API requests (React frontend)
+            if (request.headers.get('Content-Type') == 'application/json' or 
+                request.headers.get('Accept') and 'application/json' in request.headers.get('Accept')):
                 return jsonify({
                     'success': True,
                     'user': {
@@ -712,15 +720,72 @@ def login():
                         'username': user.username,
                         'is_admin': user.is_admin
                     }
-                })
+                }), 200
+            
+            # Handle form submissions (template-based)
             else:
                 next_page = request.args.get('next')
                 return redirect(next_page) if next_page else redirect(url_for('gallery'))
         else:
             print(f"Login failed for {username} - invalid credentials")
-            flash('Invalid username or password')
+            
+            # Handle API requests
+            if (request.headers.get('Content-Type') == 'application/json' or 
+                request.headers.get('Accept') and 'application/json' in request.headers.get('Accept')):
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid username or password'
+                }), 401
+            
+            # Handle template requests
+            else:
+                flash('Invalid username or password')
     
+    # Always render template for GET requests
     return render_template('login.html')
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """API-only login endpoint for React frontend"""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    print(f"API Login attempt for user: {username}")
+    print(f"Request IP: {request.remote_addr}")
+    print(f"Origin: {request.headers.get('Origin', 'No Origin')}")
+    
+    user = user_manager.verify_password(username, password)
+    if user:
+        # Clear any existing session data
+        session.clear()
+        
+        # Login the user
+        login_user(user, remember=True)
+        session.permanent = True
+        
+        # Store session data
+        session['user_id'] = user.id
+        session['username'] = user.username
+        session['is_admin'] = user.is_admin
+        
+        print(f"API Login successful for {username}")
+        print(f"Session data: {dict(session)}")
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'is_admin': user.is_admin
+            }
+        }), 200
+    else:
+        print(f"API Login failed for {username}")
+        return jsonify({
+            'success': False,
+            'error': 'Invalid username or password'
+        }), 401
 
 
 

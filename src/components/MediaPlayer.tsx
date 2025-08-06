@@ -109,60 +109,59 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     hideControlsTimer();
   }, [hideControlsTimer]);
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (!isOpen) return;
-
-    // Prevent browser defaults for media keys
-    const mediaKeys = ['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyM', 'Escape'];
-    if (mediaKeys.includes(event.code)) {
-      event.preventDefault();
-    }
-
-    switch (event.code) {
-      case 'Space':
-        togglePlayPause();
-        break;
-      case 'ArrowLeft':
-        skipTime(-10);
-        break;
-      case 'ArrowRight':
-        skipTime(10);
-        break;
-      case 'ArrowUp':
-        adjustVolume(5);
-        break;
-      case 'ArrowDown':
-        adjustVolume(-5);
-        break;
-      case 'KeyF':
-        toggleFullscreen();
-        break;
-      case 'KeyM':
-        toggleMute();
-        break;
-      case 'Escape':
-        if (isFullscreen) {
-          exitFullscreen();
-        } else {
-          onClose();
-        }
-        break;
-      case 'Comma':
-        if (event.shiftKey) {
-          changePlaybackRate(playbackRate - 0.25);
-        }
-        break;
-      case 'Period':
-        if (event.shiftKey) {
-          changePlaybackRate(playbackRate + 0.25);
-        }
-        break;
-    }
-  }, [isOpen, isFullscreen, playbackRate]);
-
-  // Setup event listeners
+  // Keyboard and mouse event handlers - FIXED VERSION
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isOpen) return;
+
+      // Prevent browser defaults for media keys
+      const mediaKeys = ['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyM', 'Escape'];
+      if (mediaKeys.includes(event.code)) {
+        event.preventDefault();
+      }
+
+      switch (event.code) {
+        case 'Space':
+          togglePlayPause();
+          break;
+        case 'ArrowLeft':
+          skipTime(-10);
+          break;
+        case 'ArrowRight':
+          skipTime(10);
+          break;
+        case 'ArrowUp':
+          adjustVolume(5);
+          break;
+        case 'ArrowDown':
+          adjustVolume(-5);
+          break;
+        case 'KeyF':
+          toggleFullscreen();
+          break;
+        case 'KeyM':
+          toggleMute();
+          break;
+        case 'Escape':
+          if (isFullscreen) {
+            exitFullscreen();
+          } else {
+            onClose();
+          }
+          break;
+        case 'Comma':
+          if (event.shiftKey) {
+            changePlaybackRate(playbackRate - 0.25);
+          }
+          break;
+        case 'Period':
+          if (event.shiftKey) {
+            changePlaybackRate(playbackRate + 0.25);
+          }
+          break;
+      }
+    };
+
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousemove', handleMouseMove);
     
@@ -173,12 +172,21 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         clearTimeout(controlsTimeout);
       }
     };
-  }, [handleKeyDown, handleMouseMove, controlsTimeout]);
+  }, [
+    isOpen, 
+    isFullscreen, 
+    playbackRate, 
+    handleMouseMove, 
+    controlsTimeout,
+    isPlaying,
+    volume,
+    isMuted
+  ]);
 
   // Handle fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const isInFullscreen = !!document.fullscreenElement;
+      const isInFullscreen = !document.fullscreenElement;
       setIsFullscreen(isInFullscreen);
       
       if (!isInFullscreen) {
@@ -410,13 +418,19 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                 <div className="text-center">
                   <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mb-6 mx-auto backdrop-blur-sm">
                     {isPlaying ? (
-                      <Pause className="w-16 h-16 text-white" />
+                      <div className="w-16 h-16 relative">
+                        <div className="absolute inset-0 border-4 border-white/30 rounded-full"></div>
+                        <div 
+                          className="absolute inset-0 border-4 border-white border-t-transparent rounded-full animate-spin"
+                          style={{ animationDuration: '2s' }}
+                        ></div>
+                      </div>
                     ) : (
-                      <Play className="w-16 h-16 text-white ml-2" />
+                      <Play className="w-16 h-16 text-white" />
                     )}
                   </div>
-                  <p className="text-white text-2xl font-medium mb-2">{media.title}</p>
-                  <p className="text-white/70 text-lg">Audio Track</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
+                  <p className="text-white/80">Audio Playback</p>
                 </div>
               </div>
             </div>
@@ -425,295 +439,253 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
         {/* Image Viewer */}
         {isImage && (
-          <div className="w-full h-full flex items-center justify-center">
-            <img
-              src={media.url || media.image}
+          <div className="w-full h-full flex items-center justify-center p-4">
+            <img 
+              src={media.url || media.image} 
               alt={media.title}
               className="max-w-full max-h-full object-contain"
             />
           </div>
         )}
 
-        {/* Buffering Indicator */}
+        {/* Loading Indicator */}
         {isBuffering && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
           </div>
         )}
+      </div>
 
-        {/* Netflix-style Info Overlay - Top */}
-        {!isImage && (!isFullscreen || showControls) && (
-          <div className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-6 transition-opacity duration-300 ${
-            isFullscreen && !showControls ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      {/* Media Controls - Only show for video/audio */}
+      {(isVideo || isAudio) && (
+        <div 
+          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent transition-all duration-300 ${
+            showControls && !isImage ? 
+              'opacity-100 translate-y-0' : 
+              'opacity-0 translate-y-full pointer-events-none'
           }`}>
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <h1 className="text-3xl font-bold text-white mb-3">{media.title}</h1>
-                <div className="flex items-center gap-4 text-white/80">
-                  {media.year && <span>{media.year}</span>}
-                  {media.genre && <span>{media.genre}</span>}
-                  {media.duration && <span>{media.duration}</span>}
-                </div>
+          {/* Progress Bar */}
+          <div className="px-6 pt-4">
+            <div 
+              className="w-full h-2 bg-white/20 rounded-full cursor-pointer group"
+              onClick={handleSeek}
+            >
+              <div 
+                className="h-full bg-red-600 rounded-full transition-all relative group-hover:bg-red-500"
+                style={{ width: `${progress}%` }}
+              >
+                <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
+            </div>
+            <div className="flex justify-between text-sm text-white/70 mt-2">
+              <span>{formatTime(currentTime)}</span>
+              <span>{duration ? formatTime(duration) : media.duration || '0:00'}</span>
+            </div>
+          </div>
+
+          {/* Control Buttons */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => skipTime(-10)}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                title="Rewind 10s"
+              >
+                <Rewind className="w-6 h-6 text-white" />
+              </button>
               
-              <div className="flex items-center gap-3">
-                <button 
-                  className="p-3 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
-                  title="Add to List"
+              <button 
+                onClick={togglePlayPause}
+                className="p-4 hover:bg-white/20 rounded-full transition-colors"
+                title={isPlaying ? "Pause" : "Play"}
+              >
+                {isPlaying ? (
+                  <Pause className="w-8 h-8 text-white" />
+                ) : (
+                  <Play className="w-8 h-8 text-white ml-1" />
+                )}
+              </button>
+              
+              <button 
+                onClick={() => skipTime(10)}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                title="Forward 10s"
+              >
+                <FastForward className="w-6 h-6 text-white" />
+              </button>
+
+              {nextEpisode && (
+                <button
+                  onClick={onNextEpisode}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                  title="Next Episode"
                 >
-                  <Plus className="w-5 h-5 text-white" />
+                  <SkipForward className="w-5 h-5 text-white" />
+                  <span className="text-white text-sm">Next</span>
                 </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Volume Control */}
+              <div className="flex items-center gap-2">
                 <button 
-                  className="p-3 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
-                  title="Like"
+                  onClick={toggleMute}
+                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                  title={isMuted ? "Unmute" : "Mute"}
                 >
-                  <ThumbsUp className="w-5 h-5 text-white" />
+                  {isMuted || volume === 0 ? (
+                    <VolumeX className="w-5 h-5 text-white" />
+                  ) : (
+                    <Volume2 className="w-5 h-5 text-white" />
+                  )}
                 </button>
+                <div 
+                  className="w-24 h-1 bg-white/30 rounded-full cursor-pointer group"
+                  onClick={handleVolumeChange}
+                >
+                  <div 
+                    className="h-full bg-white rounded-full group-hover:bg-white/80 transition-colors"
+                    style={{ width: `${isMuted ? 0 : volume}%` }}
+                  ></div>
+                </div>
+                <span className="text-white/70 text-sm w-8 text-right">
+                  {Math.round(isMuted ? 0 : volume)}
+                </span>
+              </div>
+
+              {/* Settings */}
+              <div className="relative">
                 <button 
                   onClick={() => setShowSettings(!showSettings)}
-                  className="p-3 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm relative"
+                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
                   title="Settings"
                 >
                   <Settings className="w-5 h-5 text-white" />
                 </button>
+                
+                {showSettings && (
+                  <div className="absolute bottom-12 right-0 bg-black/90 backdrop-blur-sm rounded-lg p-4 w-48">
+                    <div className="mb-3">
+                      <label className="text-white/70 text-sm">Speed</label>
+                      <div className="flex gap-1 mt-1">
+                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => changePlaybackRate(rate)}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              playbackRate === rate 
+                                ? 'bg-red-600 text-white' 
+                                : 'text-white/70 hover:text-white hover:bg-white/10'
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="absolute top-20 right-6 bg-black/90 backdrop-blur-sm rounded-lg p-4 min-w-[200px] z-50">
-            <h3 className="text-white font-semibold mb-3">Settings</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-white/70 text-sm mb-1 block">Playback Speed</label>
-                <select 
-                  value={playbackRate}
-                  onChange={(e) => changePlaybackRate(parseFloat(e.target.value))}
-                  className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm"
-                >
-                  <option value={0.25}>0.25x</option>
-                  <option value={0.5}>0.5x</option>
-                  <option value={0.75}>0.75x</option>
-                  <option value={1}>Normal</option>
-                  <option value={1.25}>1.25x</option>
-                  <option value={1.5}>1.5x</option>
-                  <option value={1.75}>1.75x</option>
-                  <option value={2}>2x</option>
-                </select>
-              </div>
-              <button className="flex items-center gap-2 text-white/70 hover:text-white w-full text-left">
-                <Subtitles className="w-4 h-4" />
-                Subtitles
+              {/* Fullscreen */}
+              <button 
+                onClick={toggleFullscreen}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-5 h-5 text-white" />
+                ) : (
+                  <Maximize2 className="w-5 h-5 text-white" />
+                )}
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Netflix-style Controls - Bottom */}
-        {(isVideo || isAudio) && (
-          <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-all duration-300 ${
-            isFullscreen && !showControls ? 'opacity-0 translate-y-full pointer-events-none' : 'opacity-100 translate-y-0'
-          }`}>
-            {/* Progress Bar */}
-            <div className="px-6 pt-4">
-              <div 
-                className="w-full h-2 bg-white/20 rounded-full cursor-pointer group"
-                onClick={handleSeek}
-              >
-                <div 
-                  className="h-full bg-red-600 rounded-full transition-all relative group-hover:bg-red-500"
-                  style={{ width: `${progress}%` }}
-                >
-                  <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </div>
-              </div>
-              <div className="flex justify-between text-sm text-white/70 mt-2">
-                <span>{formatTime(currentTime)}</span>
-                <span>{duration ? formatTime(duration) : media.duration || '0:00'}</span>
-              </div>
-            </div>
-
-            {/* Control Buttons */}
-            <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => skipTime(-10)}
-                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                  title="Rewind 10s"
-                >
-                  <Rewind className="w-6 h-6 text-white" />
-                </button>
-                
-                <button 
-                  onClick={togglePlayPause}
-                  className="p-4 hover:bg-white/20 rounded-full transition-colors"
-                  title={isPlaying ? "Pause" : "Play"}
-                >
-                  {isPlaying ? (
-                    <Pause className="w-8 h-8 text-white" />
-                  ) : (
-                    <Play className="w-8 h-8 text-white ml-1" />
-                  )}
-                </button>
-                
-                <button 
-                  onClick={() => skipTime(10)}
-                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                  title="Forward 10s"
-                >
-                  <FastForward className="w-6 h-6 text-white" />
-                </button>
-
-                {nextEpisode && (
-                  <button
-                    onClick={onNextEpisode}
-                    className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    title="Next Episode"
-                  >
-                    <SkipForward className="w-5 h-5 text-white" />
-                    <span className="text-white text-sm">Next</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-4">
-                {/* Volume Control */}
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={toggleMute}
-                    className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                    title={isMuted ? "Unmute" : "Mute"}
-                  >
-                    {isMuted || volume === 0 ? (
-                      <VolumeX className="w-5 h-5 text-white" />
-                    ) : (
-                      <Volume2 className="w-5 h-5 text-white" />
-                    )}
-                  </button>
-                  <div 
-                    className="w-24 h-1 bg-white/30 rounded-full cursor-pointer group"
-                    onClick={handleVolumeChange}
-                  >
-                    <div 
-                      className="h-full bg-white rounded-full group-hover:bg-white/80 transition-colors"
-                      style={{ width: `${isMuted ? 0 : volume}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-white/70 text-sm w-8 text-right">
-                    {Math.round(isMuted ? 0 : volume)}
-                  </span>
-                </div>
-
-                {/* Download Button */}
-                {media.url && (
-                  <a
-                    href={media.url}
-                    download={media.title}
-                    className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                    title="Download"
-                  >
-                    <Download className="w-5 h-5 text-white" />
-                  </a>
-                )}
-
-                {/* Fullscreen Button - Only for video */}
-                {isVideo && (
-                  <button 
-                    onClick={toggleFullscreen}
-                    className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                  >
-                    {isFullscreen ? (
-                      <Minimize2 className="w-5 h-5 text-white" />
-                    ) : (
-                      <Maximize2 className="w-5 h-5 text-white" />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Next Episode Overlay */}
-        {showNextEpisode && nextEpisode && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <div className="bg-white/95 backdrop-blur-sm rounded-lg p-6 max-w-md mx-4 text-center">
-              <h3 className="text-xl font-semibold mb-2 text-gray-900">Up Next</h3>
+      {/* Next Episode Overlay */}
+      {showNextEpisode && nextEpisode && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-8 max-w-md mx-4 text-center">
+            <h3 className="text-2xl font-bold text-white mb-4">Next Episode</h3>
+            <div className="mb-6">
               <img 
                 src={nextEpisode.image} 
                 alt={nextEpisode.title}
                 className="w-full h-32 object-cover rounded-lg mb-4"
               />
-              <h4 className="text-lg font-medium mb-2 text-gray-900">{nextEpisode.title}</h4>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowNextEpisode(false);
-                    onNextEpisode?.();
-                  }}
-                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Play Next Episode
-                </button>
-                <button
-                  onClick={() => setShowNextEpisode(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-900"
-                >
-                  Cancel
-                </button>
-              </div>
+              <h4 className="text-lg font-semibold text-white">{nextEpisode.title}</h4>
+              {nextEpisode.duration && (
+                <p className="text-white/70 text-sm mt-1">{nextEpisode.duration}</p>
+              )}
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowNextEpisode(false)}
+                className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
+              >
+                Continue Watching
+              </button>
+              <button
+                onClick={() => {
+                  setShowNextEpisode(false);
+                  onNextEpisode?.();
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Play Next
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Recommendations Overlay */}
-        {showRecommendations && recommendedMedia.length > 0 && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center overflow-y-auto">
-            <div className="bg-white/95 backdrop-blur-sm rounded-lg p-6 max-w-4xl mx-4 max-h-[80vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">More Like This</h3>
-                <button
-                  onClick={() => setShowRecommendations(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+      {/* Recommendations Overlay */}
+      {showRecommendations && recommendedMedia.length > 0 && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-white">You might also like</h3>
+              <button
+                onClick={() => setShowRecommendations(false)}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {recommendedMedia.map((item, index) => (
+                <div 
+                  key={index}
+                  className="group cursor-pointer"
+                  onClick={() => {
+                    setShowRecommendations(false);
+                    onRecommendedSelect?.(item);
+                  }}
                 >
-                  <X className="w-5 h-5 text-gray-900" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {recommendedMedia.slice(0, 8).map((item, index) => (
-                  <div 
-                    key={item.id || index}
-                    className="group cursor-pointer"
-                    onClick={() => {
-                      setShowRecommendations(false);
-                      onRecommendedSelect?.(item);
-                    }}
-                  >
-                    <div className="relative overflow-hidden rounded-lg mb-2">
-                      <img 
-                        src={item.image} 
-                        alt={item.title}
-                        className="w-full h-32 object-cover group-hover:scale-105 transition-transform duration-200"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                        <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </div>
-                    <h4 className="text-sm font-medium line-clamp-2 text-gray-900">{item.title}</h4>
-                    <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
-                      {item.year && <span>{item.year}</span>}
-                      {item.duration && <span>{item.duration}</span>}
+                  <div className="relative overflow-hidden rounded-lg mb-2">
+                    <img 
+                      src={item.image} 
+                      alt={item.title}
+                      className="w-full h-32 object-cover group-hover:scale-105 transition-transform duration-200"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
-                ))}
-              </div>
+                  <h4 className="text-sm font-medium line-clamp-2 text-gray-900">{item.title}</h4>
+                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                    {item.year && <span>{item.year}</span>}
+                    {item.duration && <span>{item.duration}</span>}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Keyboard shortcuts hint - Only show when not in fullscreen */}
       {!isFullscreen && (
