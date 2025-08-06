@@ -1,7 +1,7 @@
 // src/pages/Login.tsx
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Play, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Cloud, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -40,7 +40,7 @@ const Login: React.FC = () => {
       if (success) {
         toast({
           title: "Login Successful",
-          description: "Welcome back to MediaServer!",
+          description: "Welcome back to SenKloud!",
         });
         navigate(from, { replace: true });
       } else {
@@ -68,23 +68,23 @@ const Login: React.FC = () => {
     }));
   };
 
-  const handleDemoLogin = () => {
-    setFormData({
-      username: 'admin',
-      password: 'admin123'
-    });
-  };
+//  const handleDemoLogin = () => {
+//  setFormData({
+//      username: 'admin',
+//      password: 'admin123'
+//    });
+//  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
       <div className="w-full max-w-md">
-        {/* Logo */}
+        {/* Logo Section */}
         <div className="text-center mb-6 sm:mb-8">
           <div className="w-12 h-12 sm:w-16 sm:h-16 primary-gradient rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
-            <Play className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
+            <Cloud className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">MediaServer</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-2">Sign in to your account</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">SenKloud</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-2">Start watching today</p>
         </div>
 
         {/* Login Form */}
@@ -178,23 +178,7 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Demo Credentials */}
-        <div className="mt-6 p-4 bg-accent/20 rounded-lg border border-border/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                <strong>Demo:</strong> admin / admin123
-              </p>
-            </div>
-            <button
-              onClick={handleDemoLogin}
-              className="text-xs text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded border border-primary/20 hover:bg-primary/10"
-              disabled={isLoading}
-            >
-              Use Demo
-            </button>
-          </div>
-        </div>
+
       </div>
     </div>
   );

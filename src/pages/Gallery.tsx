@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import MediaCarousel from '../components/MediaCarousel';
 import MediaPlayer from '../components/MediaPlayer';
 import { apiService, MediaFile } from '../services/api';
-import { Play, Info, Loader2, AlertCircle, Folder, ChevronRight } from 'lucide-react';
+import { Cloud, Play, Info, Loader2, AlertCircle, Folder, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import heroBg from '../assets/hero-bg.png';
 
@@ -225,7 +225,7 @@ const Gallery: React.FC = () => {
         <div className="absolute inset-0 bg-black/50"></div>
         <div className="relative z-10 text-center max-w-4xl px-4 sm:px-6">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-6 drop-shadow-lg">
-            {featuredMedia?.title || 'Welcome to MediaServer'}
+            {featuredMedia?.title || 'Welcome to SenKloud'}
           </h1>
           <p className="text-base sm:text-lg lg:text-xl text-gray-200 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             {featuredMedia 

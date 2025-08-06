@@ -1,7 +1,7 @@
 // src/pages/Register.tsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Play, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Cloud, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -92,14 +92,15 @@ const Register: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
+        {/* Logo Section */}
         <div className="text-center mb-6 sm:mb-8">
           <div className="w-12 h-12 sm:w-16 sm:h-16 primary-gradient rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
-            <Play className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
+            <Cloud className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">MediaServer</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-2">Create your account</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">SenKloud</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-2">Start watching today</p>
         </div>
+
 
         {/* Registration Form */}
         <div className="glass-effect rounded-xl p-6 sm:p-8">

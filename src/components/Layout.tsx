@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
+  Cloud,
   Upload, 
   Settings, 
   User, 
@@ -191,10 +192,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <div className="w-8 h-8 sm:w-10 sm:h-10 primary-gradient rounded-xl flex items-center justify-center shadow-lg">
-                <Play className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+                <Cloud className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-lg sm:text-xl font-bold text-foreground">MediaServer</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-foreground">SenKloud</h1>
                 <div className="text-xs text-muted-foreground">Personal Media Hub</div>
               </div>
             </div>
@@ -323,8 +324,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Play className="w-4 h-4 text-primary-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">MediaServer</p>
-                <p className="text-xs">© 2024 All rights reserved.</p>
+                <p className="text-sm font-medium text-foreground">SenKloud</p>
+                <p className="text-xs">© 2025 All rights reserved.</p>
               </div>
             </div>
             <div className="flex items-center gap-6">
