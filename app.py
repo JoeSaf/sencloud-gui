@@ -11,7 +11,7 @@ import hashlib
 import mimetypes
 import subprocess
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -71,7 +71,17 @@ streaming_tokens = {}
 # Flask app setup
 app = Flask(__name__)
 app.config.from_object(Config)
-CORS(app, supports_credentials=True)
+app.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to True if using HTTPS
+    SESSION_COOKIE_HTTPONLY=True,  # Prevents JavaScript access (security)
+    SESSION_COOKIE_SAMESITE='Lax',  # Allows cross-origin requests within same site
+    SESSION_PERMANENT=True,  # Make sessions permanent
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # Session lasts 7 days
+    SESSION_COOKIE_DOMAIN=None,  # Allow cookies on any domain/IP in network
+)
+
+# Enable CORS with credentials support
+CORS(app, supports_credentials=True, origins=['*'])
 
 # Flask-Login setup
 login_manager = LoginManager()
@@ -669,13 +679,50 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        
+        print(f"Login attempt for user: {username}")
+        print(f"Request IP: {request.remote_addr}")
+        print(f"User Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        
         user = user_manager.verify_password(username, password)
         if user:
-            login_user(user)
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('gallery'))
-        flash('Invalid username or password')
+            # Clear any existing session data
+            session.clear()
+            
+            # Login the user with remember=True for persistent sessions
+            login_user(user, remember=True)
+            
+            # Make session permanent
+            session.permanent = True
+            
+            # Store additional session data
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['is_admin'] = user.is_admin
+            
+            print(f"Login successful for {username}")
+            print(f"Session ID: {session.get('_id', 'No session ID')}")
+            
+            # Handle both form submissions and API calls
+            if request.headers.get('Content-Type') == 'application/json':
+                return jsonify({
+                    'success': True,
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'is_admin': user.is_admin
+                    }
+                })
+            else:
+                next_page = request.args.get('next')
+                return redirect(next_page) if next_page else redirect(url_for('gallery'))
+        else:
+            print(f"Login failed for {username} - invalid credentials")
+            flash('Invalid username or password')
+    
     return render_template('login.html')
+
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -696,11 +743,35 @@ def register():
             return redirect(url_for('login'))
     return render_template('register.html')
 
+
 @app.route('/logout')
 @login_required
 def logout():
+    print(f"Logout for user: {current_user.username if current_user.is_authenticated else 'Unknown'}")
+    
+    # Clear session data
+    session.clear()
+    
+    # Logout user
     logout_user()
+    
     return redirect(url_for('login'))
+
+# Add a middleware to help debug session issues
+@app.before_request
+def before_request():
+    """Debug session information on each request"""
+    if app.debug:  # Only in debug mode
+        print(f"\n--- Request Debug Info ---")
+        print(f"Path: {request.path}")
+        print(f"Method: {request.method}")
+        print(f"IP: {request.remote_addr}")
+        print(f"Session ID: {session.get('_id', 'No session')}")
+        print(f"User authenticated: {current_user.is_authenticated}")
+        if current_user.is_authenticated:
+            print(f"Current user: {current_user.username}")
+        print(f"Session data: {dict(session)}")
+        print("--- End Debug Info ---\n")
 
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
@@ -1074,6 +1145,22 @@ def api_files():
     
     return jsonify(files)
 
+@app.route('/api/session-info')
+@login_required
+def session_info():
+    """Debug endpoint to check session information"""
+    return jsonify({
+        'session_id': session.get('_id', 'No session ID'),
+        'user_id': session.get('user_id', 'No user ID'),
+        'session_permanent': session.permanent,
+        'logged_in': current_user.is_authenticated,
+        'user': {
+            'id': current_user.id,
+            'username': current_user.username,
+            'is_admin': current_user.is_admin
+        } if current_user.is_authenticated else None
+    })
+    
 @app.route('/api/folders')
 @login_required
 def api_folders():

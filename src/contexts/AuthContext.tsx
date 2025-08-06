@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.tsx
+// src/contexts/AuthContext.tsx - Fixed version
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiService, User } from '../services/api';
 
@@ -39,76 +39,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      // First check cached status
-      const cachedAuth = localStorage.getItem('isAuthenticated');
-      const authTime = localStorage.getItem('authCheckTime');
+      // Always verify with server on app load - don't rely on localStorage cache
+      console.log('Checking auth status with server...');
       
-      if (cachedAuth === 'true' && authTime) {
-        const TWO_DAYS = 2 * 24 * 60 * 60 * 1000;
-        const isExpired = Date.now() - parseInt(authTime) > TWO_DAYS;
-        
-        if (!isExpired) {
-          // Use cached auth status
-          setUser({
-            id: '1',
-            username: localStorage.getItem('username') || 'user',
-            is_admin: localStorage.getItem('isAdmin') === 'true',
-          });
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      // Verify with server if cache is expired or missing
       const response = await apiService.getAdminStats();
       if (response.success) {
+        // Server confirms we're authenticated
         const userData = {
           id: '1',
-          username: localStorage.getItem('username') || 'admin',
-          is_admin: true,
+          username: localStorage.getItem('username') || 'user',
+          is_admin: localStorage.getItem('isAdmin') === 'true',
         };
         setUser(userData);
         
-        // Update cache
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('authCheckTime', Date.now().toString());
-        localStorage.setItem('username', userData.username);
-        localStorage.setItem('isAdmin', 'true');
+        console.log('Auth verified - user is authenticated');
       } else {
-        // Clear invalid cache
-        localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('authCheckTime');
-        localStorage.removeItem('username');
-        localStorage.removeItem('isAdmin');
+        // Server says we're not authenticated
+        console.log('Auth check failed - clearing session');
+        clearAuthData();
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
-      // Clear cache on error
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('authCheckTime');
-      localStorage.removeItem('username');
-      localStorage.removeItem('isAdmin');
+      console.error('Auth check error:', error);
+      // On network error, don't immediately log out - could be temporary
+      // Only clear auth if we get a definitive 401 response
+      if (error instanceof Error && error.message.includes('401')) {
+        clearAuthData();
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const clearAuthData = () => {
+    localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
+    setUser(null);
+  };
+
   const login = async (username: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
+      console.log('Attempting login for user:', username);
+      
       const response = await apiService.login(username, password);
       if (response.success && response.data) {
         setUser(response.data);
         
-        // Store user data in localStorage
+        // Store user data in localStorage for persistence
         localStorage.setItem('username', response.data.username);
         localStorage.setItem('isAdmin', response.data.is_admin.toString());
         
+        console.log('Login successful');
         return true;
       }
+      
+      console.log('Login failed - invalid credentials');
       return false;
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('Login error:', error);
       return false;
     } finally {
       setIsLoading(false);
@@ -136,15 +124,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       await apiService.logout();
-      setUser(null);
-      
-      // Clear all localStorage data
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('authCheckTime');
-      localStorage.removeItem('username');
-      localStorage.removeItem('isAdmin');
+      clearAuthData();
+      console.log('Logout successful');
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout error:', error);
+      // Still clear local data even if server request fails
+      clearAuthData();
     } finally {
       setIsLoading(false);
     }

@@ -1,4 +1,4 @@
-// src/services/api.ts - Updated with search functionality
+// src/services/api.ts - Fixed version
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -53,58 +53,9 @@ export interface UploadProgress {
 
 class ApiService {
   private baseUrl: string;
-  private isAuthenticated: boolean = false;
 
   constructor() {
     this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    
-    // Check cached auth status first
-    this.isAuthenticated = this.getCachedAuthStatus();
-    
-    // Then verify with server
-    this.checkAuthStatus();
-  }
-
-  private async checkAuthStatus() {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/admin/stats`, {
-        credentials: 'include'
-      });
-      this.isAuthenticated = response.ok;
-      
-      // Store auth status in localStorage for persistence
-      if (response.ok) {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('authCheckTime', Date.now().toString());
-      } else {
-        localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('authCheckTime');
-      }
-    } catch {
-      this.isAuthenticated = false;
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('authCheckTime');
-    }
-  }
-
-  // Check if we have a valid cached auth status
-  private getCachedAuthStatus(): boolean {
-    const isAuth = localStorage.getItem('isAuthenticated');
-    const authTime = localStorage.getItem('authCheckTime');
-    
-    if (!isAuth || !authTime) return false;
-    
-    // Check if auth is still valid (2 days = 172800000 ms)
-    const TWO_DAYS = 2 * 24 * 60 * 60 * 1000;
-    const isExpired = Date.now() - parseInt(authTime) > TWO_DAYS;
-    
-    if (isExpired) {
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('authCheckTime');
-      return false;
-    }
-    
-    return isAuth === 'true';
   }
 
   private async request<T>(
@@ -117,13 +68,21 @@ class ApiService {
           'Content-Type': 'application/json',
           ...options.headers,
         },
-        credentials: 'include',
+        credentials: 'include', // This is crucial for cross-device sessions
         ...options,
       });
 
+      // Handle authentication errors properly
       if (response.status === 401) {
-        this.isAuthenticated = false;
-        window.location.href = '/login';
+        // Clear any stale local data
+        localStorage.removeItem('username');
+        localStorage.removeItem('isAdmin');
+        
+        // Only redirect if we're not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+        
         throw new Error('Unauthorized');
       }
 
@@ -141,6 +100,7 @@ class ApiService {
         data,
       };
     } catch (error) {
+      console.error('API request error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error',
@@ -155,22 +115,57 @@ class ApiService {
     formData.append('password', password);
 
     try {
+      console.log('Sending login request to server...');
+      
       const response = await fetch(`${this.baseUrl}/login`, {
         method: 'POST',
         body: formData,
-        credentials: 'include',
+        credentials: 'include', // Essential for session cookies
       });
 
-      if (response.redirected || response.url.includes('/gallery')) {
-        this.isAuthenticated = true;
-        // Store auth status with 2-day expiry
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('authCheckTime', Date.now().toString());
-        return { success: true, data: { id: '1', username, is_admin: true } };
+      console.log('Login response status:', response.status);
+      console.log('Login response redirected:', response.redirected);
+      console.log('Login response URL:', response.url);
+
+      // Check for successful login (redirect or success status)
+      if (response.redirected || response.url.includes('/gallery') || response.status === 200) {
+        // Try to determine admin status from a follow-up request
+        try {
+          const statsResponse = await fetch(`${this.baseUrl}/api/admin/stats`, {
+            credentials: 'include'
+          });
+          const isAdmin = statsResponse.ok;
+          
+          console.log('User is admin:', isAdmin);
+          
+          return { 
+            success: true, 
+            data: { 
+              id: '1', 
+              username, 
+              is_admin: isAdmin 
+            } 
+          };
+        } catch (adminCheckError) {
+          console.warn('Could not determine admin status:', adminCheckError);
+          // Default to non-admin if check fails
+          return { 
+            success: true, 
+            data: { 
+              id: '1', 
+              username, 
+              is_admin: false 
+            } 
+          };
+        }
       }
 
+      // If we get here, login failed
+      console.log('Login failed - no redirect detected');
       return { success: false, error: 'Invalid credentials' };
+      
     } catch (error) {
+      console.error('Login request error:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Login failed' 
@@ -214,12 +209,13 @@ class ApiService {
         method: 'GET',
         credentials: 'include',
       });
+      console.log('Logout request sent to server');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      this.isAuthenticated = false;
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('authCheckTime');
+      // Always clear local data
+      localStorage.removeItem('username');
+      localStorage.removeItem('isAdmin');
     }
   }
 
@@ -424,11 +420,7 @@ class ApiService {
     return this.request('/api/upload-status');
   }
 
-  // Utility
-  getAuthStatus(): boolean {
-    return this.isAuthenticated;
-  }
-
+  // Utility methods
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -457,14 +449,6 @@ class ApiService {
     }
 
     return 'document'; // Default fallback
-  }
-
-  // Cache management
-  clearCache(): void {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('authCheckTime');
-    localStorage.removeItem('username');
-    localStorage.removeItem('isAdmin');
   }
 
   // Health check
