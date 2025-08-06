@@ -18,6 +18,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, abort, Response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from PIL import Image, ImageOps
+from flask_cors import CORS
 import requests
 
 import secrets
@@ -70,6 +71,7 @@ streaming_tokens = {}
 # Flask app setup
 app = Flask(__name__)
 app.config.from_object(Config)
+CORS(app, supports_credentials=True)
 
 # Flask-Login setup
 login_manager = LoginManager()
@@ -1445,4 +1447,9 @@ if __name__ == '__main__':
     ensure_directory(os.path.join(app.static_folder, 'thumbnails'))
     
     # Run the app
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(
+        host='0.0.0.0',  # Listen on all interfaces
+        port=5000,
+        debug=True,
+        threaded=True  # Enable threading for better performance
+    )

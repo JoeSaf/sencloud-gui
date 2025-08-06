@@ -129,6 +129,100 @@
 }
 
 @layer components {
+  .mobile-menu-enter {
+    @apply transition-all duration-300 ease-out;
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+
+  .mobile-menu-enter-active {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .mobile-menu-exit {
+    @apply transition-all duration-200 ease-in;
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .mobile-menu-exit-active {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+
+  .nav-item-hover {
+    @apply relative overflow-hidden;
+  }
+
+  .nav-item-hover::before {
+    content: '';
+    @apply absolute inset-0 bg-primary/10 rounded-lg;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+
+  .nav-item-hover:hover::before {
+    transform: scaleX(1);
+  }
+
+  .navbar-blur {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Mobile menu animations */
+  @keyframes slideDown {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+  }
+
+  .mobile-menu-open {
+    animation: slideDown 0.3s ease-out forwards;
+  }
+
+  .mobile-menu-close {
+    animation: slideUp 0.2s ease-in forwards;
+  }
+
+  /* Enhanced focus states for accessibility */
+  .nav-focus:focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Smooth scroll behavior */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Mobile-specific improvements */
+  @media (max-width: 768px) {
+    .mobile-touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}
+
+@layer components {
   /* Apple TV-style components */
   .media-card {
     @apply relative rounded-xl overflow-hidden cursor-pointer;
@@ -219,5 +313,280 @@
 
   .upload-zone.dragover {
     @apply border-primary bg-primary/10;
+  }
+}
+
+/* Add these styles to your src/index.css file for enhanced mobile navigation */
+
+@layer components {
+  /* Mobile touch targets */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Safe area support for devices with notches/home indicators */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+  }
+
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  .h-safe-area-inset-bottom {
+    height: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Enhanced navigation styles */
+  .navbar-blur {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Mobile menu animations */
+  .mobile-menu-slide-in {
+    animation: slideInFromTop 0.3s ease-out forwards;
+  }
+
+  .mobile-menu-slide-out {
+    animation: slideOutToTop 0.2s ease-in forwards;
+  }
+
+  @keyframes slideInFromTop {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideOutToTop {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+  }
+
+  /* Bottom navigation enhancements */
+  .bottom-nav-item {
+    @apply relative transition-all duration-300 ease-out;
+  }
+
+  .bottom-nav-item.active {
+    transform: translateY(-2px);
+  }
+
+  .bottom-nav-item.active::before {
+    content: '';
+    @apply absolute -top-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-primary rounded-full;
+  }
+
+  /* Pulse animation for active states */
+  .pulse-primary {
+    animation: pulsePrimary 2s infinite;
+  }
+
+  @keyframes pulsePrimary {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+    }
+  }
+
+  /* Enhanced focus states for accessibility */
+  .nav-focus:focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Smooth transitions for all interactive elements */
+  .nav-item {
+    @apply transition-all duration-200 ease-out;
+  }
+
+  .nav-item:hover {
+    transform: translateY(-1px);
+  }
+
+  .nav-item:active {
+    transform: translateY(0);
+  }
+
+  /* Gradient overlays */
+  .nav-gradient-overlay {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--background) / 0.95) 0%,
+      hsl(var(--background) / 0.8) 100%
+    );
+  }
+
+  /* Glass morphism effects */
+  .glass-nav {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .glass-nav {
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Responsive text scaling */
+  @media (max-width: 375px) {
+    .mobile-text-xs {
+      font-size: 0.65rem;
+    }
+  }
+
+  /* Status indicator animations */
+  .status-indicator {
+    position: relative;
+  }
+
+  .status-indicator::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: hsl(var(--primary));
+    border-radius: 50%;
+    animation: statusPulse 2s infinite;
+  }
+
+  @keyframes statusPulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.2);
+      opacity: 0.7;
+    }
+  }
+
+  /* Swipe gesture hints */
+  .swipe-hint {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .swipe-hint::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    animation: swipeShimmer 3s infinite;
+  }
+
+  @keyframes swipeShimmer {
+    0% {
+      left: -100%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
+  /* Loading states */
+  .nav-loading {
+    @apply animate-pulse bg-accent/50;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .nav-item {
+      border: 2px solid transparent;
+    }
+
+    .nav-item:focus {
+      border-color: currentColor;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .nav-item,
+    .mobile-menu-slide-in,
+    .mobile-menu-slide-out,
+    .pulse-primary,
+    .status-indicator::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  /* Dark mode specific adjustments */
+  .dark .mobile-nav-shadow {
+    box-shadow: 
+      0 -4px 20px rgba(0, 0, 0, 0.3),
+      0 -1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .mobile-nav-shadow {
+    box-shadow: 
+      0 -4px 20px rgba(0, 0, 0, 0.1),
+      0 -1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Custom scrollbar for mobile menu */
+  .mobile-menu-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar-track {
+    background: hsl(var(--accent) / 0.3);
+    border-radius: 2px;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 2px;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
+}
+
+/* Additional utility classes */
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block;
+  }
+  
+  .desktop-only {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+  
+  .desktop-only {
+    display: block;
   }
 }

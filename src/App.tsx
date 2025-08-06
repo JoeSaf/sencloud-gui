@@ -33,16 +33,6 @@ const App = () => (
         <AuthProvider>
           <Routes>
             {/* Public routes */}
-            <Route
-              path="/folder/:type/:folder?"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <FolderView />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
@@ -57,6 +47,31 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            
+            {/* Fixed folder routing - now it should work properly */}
+            <Route
+              path="/browse/:type"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <FolderView />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Specific folder within type */}
+            <Route
+              path="/folder/:type/:folder"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <FolderView />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            
             <Route
               path="/upload"
               element={

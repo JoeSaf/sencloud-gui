@@ -1,6 +1,6 @@
 // src/pages/FolderView.tsx
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Grid, List, Play, Image, Music, Film, Loader2, AlertCircle } from 'lucide-react';
 import { apiService, MediaFile } from '../services/api';
@@ -21,13 +21,16 @@ interface MediaItem {
 }
 
 const FolderView: React.FC = () => {
-  const { type, folder } = useParams<{ type: string; folder: string }>();
+  const { type, folder } = useParams<{ type: string; folder?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
 
-  const decodedFolder = folder ? decodeURIComponent(folder) : '';
+  // Get folder from URL params or search params
+  const folderParam = folder || searchParams.get('folder') || '';
+  const decodedFolder = folderParam ? decodeURIComponent(folderParam) : '';
 
   // Fetch folder contents
   const { 

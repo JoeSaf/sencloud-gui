@@ -1,5 +1,5 @@
-// src/pages/Gallery.tsx
-import React, { useState, useEffect } from 'react';
+// src/pages/Gallery.tsx - Updated navigation section
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import MediaCarousel from '../components/MediaCarousel';
@@ -7,7 +7,7 @@ import MediaPlayer from '../components/MediaPlayer';
 import { apiService, MediaFile } from '../services/api';
 import { Play, Info, Loader2, AlertCircle, Folder, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import heroBg from '../assets/hero-bg.jpg';
+import heroBg from '../assets/hero-bg.png';
 
 interface MediaItem {
   id: string;
@@ -24,6 +24,7 @@ const Gallery: React.FC = () => {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [featuredMedia, setFeaturedMedia] = useState<MediaItem | null>(null);
+  const libraryRef = useRef<HTMLDivElement>(null);
 
   // Fetch all media files
   const { 
@@ -160,6 +161,10 @@ const Gallery: React.FC = () => {
     }
   };
 
+  const handleBrowseLibrary = () => {
+    libraryRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleRefresh = () => {
     refetchMedia();
     toast({
@@ -238,7 +243,10 @@ const Gallery: React.FC = () => {
                 Play Now
               </button>
             )}
-            <button className="flex items-center gap-2 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors backdrop-blur-sm">
+            <button 
+              onClick={handleBrowseLibrary}
+              className="flex items-center gap-2 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 w-full sm:w-auto bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors backdrop-blur-sm"
+            >
               <Info className="w-4 h-4 sm:w-5 sm:h-5" />
               Browse Library
             </button>
@@ -247,7 +255,7 @@ const Gallery: React.FC = () => {
       </div>
 
       {/* Content Sections */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <div ref={libraryRef} className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Recent Items */}
         {recentItems.length > 0 && (
           <MediaCarousel

@@ -1,9 +1,8 @@
-- the gallery components ui consistency needs to be affirmed
-- the admin page and admin protocols need to be implemented so that its invincible to the normal user and implement it 
-- when i try to visit the folder pages i get a 404, i think a page needs to be implemented so that each folder when opened open a nested component displaying the components as implemented
-- proper search page implementation to ensure consistency
-- the browse library button when clicked will scroll down to the media
-- in the playing media window, like how netflix gives the next option and media controls and so it should be here
-- create a nav bar for the responsiveness of the site so that it suites the matching when in mobile mode
+
+
+- i want it so that when i visit the folder containing lets say, im going into anime, cowboy bepop, i want to see all contents of cowboy bepop
+
+- i can actually controll any media once, such that they dont work after clicking play(spacebar), its like they work only once and the other keys dont work
+
 - when i try to login from another device in the network, it fails,fix this
 - the backend app.py is in here for any references needed
