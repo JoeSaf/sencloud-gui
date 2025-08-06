@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Enhanced with auto-fullscreen and Netflix-style controls
+// src/components/MediaPlayer.tsx - Fixed version with working controls and autoplay
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -88,17 +88,38 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
-  const mediaRef = media?.type === 'video' ? videoRef : audioRef;
+  // Get current media element reference
+  const getCurrentMediaElement = useCallback(() => {
+    if (media?.type === 'video') {
+      return videoRef.current;
+    } else if (media?.type === 'audio') {
+      return audioRef.current;
+    }
+    return null;
+  }, [media?.type]);
 
-  // Auto-enter fullscreen when media starts playing
+  // Handle close
+  const handleClose = useCallback(() => {
+    const mediaElement = getCurrentMediaElement();
+    if (mediaElement) {
+      mediaElement.pause();
+      setIsPlaying(false);
+    }
+    onClose();
+  }, [getCurrentMediaElement, onClose]);
+
+  // Auto-enter fullscreen when media starts playing - FIXED
   const autoEnterFullscreen = useCallback(async () => {
-    if (!playerContainerRef.current || hasStartedPlaying) return;
+    if (!playerContainerRef.current || hasStartedPlaying || !isPlaying) return;
+
+    // Store playing state before fullscreen
+    const mediaElement = getCurrentMediaElement();
+    const wasPlaying = mediaElement && !mediaElement.paused;
 
     try {
       // For mobile devices, request screen orientation lock to landscape
       if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
         try {
-          // Type assertion for orientation lock which may not be in all TypeScript definitions
           const orientation = window.screen.orientation as any;
           if (orientation.lock) {
             await orientation.lock('landscape');
@@ -111,6 +132,20 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       // Enter fullscreen
       if (playerContainerRef.current.requestFullscreen) {
         await playerContainerRef.current.requestFullscreen();
+        
+        // Ensure playback continues after auto-fullscreen
+        if (wasPlaying && mediaElement) {
+          setTimeout(() => {
+            if (mediaElement.paused) {
+              const playPromise = mediaElement.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                  console.log('Resume play after auto-fullscreen failed:', error);
+                });
+              }
+            }
+          }, 100);
+        }
       }
       
       setHasStartedPlaying(true);
@@ -118,7 +153,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       console.log('Fullscreen request failed:', error);
       setHasStartedPlaying(true);
     }
-  }, [hasStartedPlaying]);
+  }, [hasStartedPlaying, isPlaying, getCurrentMediaElement]);
 
   // Netflix-style control hiding with proper timeout management
   const hideControlsTimer = useCallback(() => {
@@ -153,185 +188,177 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
-  // Media control functions
+  // Media control functions - FIXED
   const togglePlayPause = useCallback(() => {
-    if (!mediaRef.current) return;
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
     if (isPlaying) {
-      mediaRef.current.pause();
+      mediaElement.pause();
     } else {
-      const playPromise = mediaRef.current.play();
+      const playPromise = mediaElement.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
           console.log('Play failed:', error);
         });
       }
     }
-  }, [isPlaying, mediaRef]);
+  }, [isPlaying, getCurrentMediaElement]);
 
   const toggleMute = useCallback(() => {
-    setIsMuted(!isMuted);
-  }, [isMuted]);
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
+    const newMuted = !isMuted;
+    mediaElement.muted = newMuted;
+    setIsMuted(newMuted);
+  }, [isMuted, getCurrentMediaElement]);
 
   const adjustVolume = useCallback((delta: number) => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
     const newVolume = Math.max(0, Math.min(100, volume + delta));
     setVolume(newVolume);
+    mediaElement.volume = newVolume / 100;
     setIsMuted(false);
-  }, [volume]);
+    mediaElement.muted = false;
+  }, [volume, getCurrentMediaElement]);
 
   const skipTime = useCallback((seconds: number) => {
-    if (!mediaRef.current || duration === 0) return;
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement || duration === 0) return;
+    
     const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    mediaRef.current.currentTime = newTime;
+    mediaElement.currentTime = newTime;
     setCurrentTime(newTime);
-  }, [mediaRef, duration, currentTime]);
+  }, [getCurrentMediaElement, duration, currentTime]);
 
   const enterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current) return;
     
+    // Store playing state before fullscreen change
+    const mediaElement = getCurrentMediaElement();
+    const wasPlaying = mediaElement && !mediaElement.paused;
+    
     try {
-      // For mobile devices, request screen orientation lock to landscape
-      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
-        try {
-          const orientation = window.screen.orientation as any;
-          if (orientation.lock) {
-            await orientation.lock('landscape');
+      await playerContainerRef.current.requestFullscreen();
+      
+      // Resume playback if it was playing before fullscreen
+      if (wasPlaying && mediaElement) {
+        // Small delay to ensure fullscreen transition completes
+        setTimeout(() => {
+          const playPromise = mediaElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log('Resume play after fullscreen failed:', error);
+            });
           }
-        } catch (error) {
-          console.log('Screen orientation lock failed:', error);
+        }, 100);
+      }
+    } catch (error) {
+      console.log('Fullscreen failed:', error);
+    }
+  }, [getCurrentMediaElement]);
+
+  const exitFullscreen = useCallback(async () => {
+    // Store playing state before exiting fullscreen
+    const mediaElement = getCurrentMediaElement();
+    const wasPlaying = mediaElement && !mediaElement.paused;
+    
+    try {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+        
+        // Resume playback if it was playing before exit
+        if (wasPlaying && mediaElement) {
+          setTimeout(() => {
+            const playPromise = mediaElement.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(error => {
+                console.log('Resume play after exit fullscreen failed:', error);
+              });
+            }
+          }, 100);
         }
       }
-      
-      await playerContainerRef.current.requestFullscreen();
     } catch (error) {
-      console.log('Fullscreen request failed:', error);
+      console.log('Exit fullscreen failed:', error);
     }
-  }, []);
-
-  const exitFullscreen = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    }
-  }, []);
+  }, [getCurrentMediaElement]);
 
   const toggleFullscreen = useCallback(() => {
-    if (!playerContainerRef.current) return;
-
-    if (document.fullscreenElement) {
+    if (isFullscreen) {
       exitFullscreen();
     } else {
       enterFullscreen();
     }
-  }, [exitFullscreen, enterFullscreen]);
+  }, [isFullscreen, enterFullscreen, exitFullscreen]);
 
-  // Improved close functionality
-  const handleClose = useCallback(() => {
-    // Clear any timeouts
-    if (controlsTimeout) {
-      clearTimeout(controlsTimeout);
-      setControlsTimeout(null);
-    }
-
-    // Pause media
-    if (mediaRef.current) {
-      mediaRef.current.pause();
-    }
-
-    // Exit fullscreen if active
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(console.error);
-    }
-
-    // Unlock screen orientation on mobile
-    if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
-      try {
-        window.screen.orientation.unlock();
-      } catch (error) {
-        console.log('Screen orientation unlock failed:', error);
-      }
-    }
-
-    // Reset states
-    setIsPlaying(false);
-    setIsFullscreen(false);
-    setShowControls(true);
-    setHasStartedPlaying(false);
-
-    // Close modal
-    onClose();
-  }, [controlsTimeout, mediaRef, onClose]);
-
-  // Keyboard and mouse event handlers
+  // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isOpen) return;
+    if (!isOpen) return;
 
-      // Prevent browser defaults for media keys
-      const mediaKeys = ['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyM', 'Escape'];
-      if (mediaKeys.includes(event.code)) {
-        event.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
       }
 
       switch (event.code) {
         case 'Space':
+          event.preventDefault();
           togglePlayPause();
           break;
-        case 'ArrowLeft':
-          skipTime(-10);
-          break;
-        case 'ArrowRight':
-          skipTime(10);
-          break;
-        case 'ArrowUp':
-          adjustVolume(5);
-          break;
-        case 'ArrowDown':
-          adjustVolume(-5);
-          break;
         case 'KeyF':
+          event.preventDefault();
           toggleFullscreen();
           break;
         case 'KeyM':
+          event.preventDefault();
           toggleMute();
           break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          skipTime(-10);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          skipTime(10);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          adjustVolume(5);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          adjustVolume(-5);
+          break;
         case 'Escape':
-          handleClose();
-          break;
-        case 'Comma':
-          if (event.shiftKey) {
-            changePlaybackRate(playbackRate - 0.25);
-          }
-          break;
-        case 'Period':
-          if (event.shiftKey) {
-            changePlaybackRate(playbackRate + 0.25);
+          event.preventDefault();
+          if (isFullscreen) {
+            exitFullscreen();
+          } else {
+            handleClose();
           }
           break;
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-    
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [
-    isOpen, 
-    playbackRate, 
-    handleClose,
-    togglePlayPause,
-    skipTime,
-    adjustVolume,
-    toggleFullscreen,
-    toggleMute
-  ]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, isFullscreen, exitFullscreen, handleClose]);
 
-  // Handle fullscreen change events
+  // Handle fullscreen changes - FIXED to maintain playback
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isInFullscreen = !!document.fullscreenElement;
+      const wasFullscreen = isFullscreen;
       setIsFullscreen(isInFullscreen);
+      
+      // Store current playing state
+      const mediaElement = getCurrentMediaElement();
+      const shouldBePlaying = mediaElement && !mediaElement.paused;
       
       if (!isInFullscreen) {
         setShowControls(true);
@@ -342,13 +369,28 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       } else {
         hideControlsTimer();
       }
+      
+      // Ensure video continues playing after fullscreen change
+      if (mediaElement && shouldBePlaying) {
+        // Small delay to ensure DOM has updated
+        setTimeout(() => {
+          if (mediaElement.paused) {
+            const playPromise = mediaElement.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(error => {
+                console.log('Resume play after fullscreen change failed:', error);
+              });
+            }
+          }
+        }, 50);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [hideControlsTimer, controlsTimeout]);
+  }, [hideControlsTimer, controlsTimeout, isFullscreen, getCurrentMediaElement]);
 
-  // Reset state when modal opens/closes and auto-start playback
+  // Reset state when modal opens/closes and handle autoplay - FIXED
   useEffect(() => {
     if (isOpen && media) {
       setIsPlaying(false);
@@ -356,46 +398,65 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       setDuration(0);
       setShowControls(true);
       setHasStartedPlaying(false);
+      setShowNextEpisode(false);
+      setShowRecommendations(false);
+      setShowSettings(false);
       
-      // Auto-start playback after a short delay to ensure everything is loaded
+      // Wait for the media element to be ready, then attempt autoplay
       const autoPlayTimer = setTimeout(() => {
-        if (mediaRef.current) {
-          const playPromise = mediaRef.current.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(error => {
-              console.log('Auto-play failed:', error);
-              // Auto-play was prevented, user will need to click play
-            });
-          }
+        const mediaElement = getCurrentMediaElement();
+        if (mediaElement && media.url) {
+          // Set the source
+          mediaElement.src = media.url;
+          mediaElement.load(); // Force load
+          
+          // Try to play after a short delay
+          const playTimer = setTimeout(() => {
+            const playPromise = mediaElement.play();
+            if (playPromise !== undefined) {
+              playPromise
+                .then(() => {
+                  console.log('Autoplay successful');
+                })
+                .catch(error => {
+                  console.log('Auto-play prevented by browser:', error);
+                  // Show a play button overlay or toast to inform user
+                });
+            }
+          }, 200);
+          
+          return () => clearTimeout(playTimer);
         }
       }, 100);
       
       return () => clearTimeout(autoPlayTimer);
     } else {
-      if (mediaRef.current) {
-        mediaRef.current.pause();
+      // Clean up when closing
+      const mediaElement = getCurrentMediaElement();
+      if (mediaElement) {
+        mediaElement.pause();
         setIsPlaying(false);
       }
-      // Clean up on close
+      
       if (controlsTimeout) {
         clearTimeout(controlsTimeout);
         setControlsTimeout(null);
       }
     }
-  }, [isOpen, media, mediaRef, controlsTimeout]);
+  }, [isOpen, media, getCurrentMediaElement, controlsTimeout]);
 
-  // Handle media events
+  // Handle media events - FIXED
   useEffect(() => {
-    const mediaElement = mediaRef.current;
+    const mediaElement = getCurrentMediaElement();
     if (!mediaElement || !isOpen) return;
 
     const handleLoadedMetadata = () => {
-      setDuration(mediaElement.duration);
+      setDuration(mediaElement.duration || 0);
       setIsBuffering(false);
     };
 
     const handleTimeUpdate = () => {
-      setCurrentTime(mediaElement.currentTime);
+      setCurrentTime(mediaElement.currentTime || 0);
     };
 
     const handleEnded = () => {
@@ -432,6 +493,13 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => setIsBuffering(false);
 
+    const handleError = (e: Event) => {
+      console.error('Media error:', e);
+      setIsBuffering(false);
+      setIsPlaying(false);
+    };
+
+    // Add all event listeners
     mediaElement.addEventListener('loadedmetadata', handleLoadedMetadata);
     mediaElement.addEventListener('timeupdate', handleTimeUpdate);
     mediaElement.addEventListener('ended', handleEnded);
@@ -439,8 +507,10 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     mediaElement.addEventListener('pause', handlePause);
     mediaElement.addEventListener('waiting', handleWaiting);
     mediaElement.addEventListener('canplay', handleCanPlay);
+    mediaElement.addEventListener('error', handleError);
 
     return () => {
+      // Remove all event listeners
       mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
       mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
       mediaElement.removeEventListener('ended', handleEnded);
@@ -448,44 +518,57 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       mediaElement.removeEventListener('pause', handlePause);
       mediaElement.removeEventListener('waiting', handleWaiting);
       mediaElement.removeEventListener('canplay', handleCanPlay);
+      mediaElement.removeEventListener('error', handleError);
     };
-  }, [mediaRef, isOpen, nextEpisode, recommendedMedia, hasStartedPlaying, autoEnterFullscreen, hideControlsTimer, controlsTimeout]);
+  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia, hasStartedPlaying, autoEnterFullscreen, hideControlsTimer, controlsTimeout]);
 
-  // Set volume and playback rate
+  // Set volume and playback rate - FIXED
   useEffect(() => {
-    if (mediaRef.current) {
-      mediaRef.current.volume = isMuted ? 0 : volume / 100;
-      mediaRef.current.playbackRate = playbackRate;
+    const mediaElement = getCurrentMediaElement();
+    if (mediaElement) {
+      mediaElement.volume = isMuted ? 0 : volume / 100;
+      mediaElement.muted = isMuted;
+      mediaElement.playbackRate = playbackRate;
     }
-  }, [volume, isMuted, playbackRate, mediaRef]);
+  }, [volume, isMuted, playbackRate, getCurrentMediaElement]);
 
   // Update controls visibility based on playing state and fullscreen
   useEffect(() => {
     hideControlsTimer();
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
-
+  // Event handlers
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!mediaRef.current || duration === 0) return;
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement || duration === 0) return;
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const newTime = (clickX / rect.width) * duration;
-    mediaRef.current.currentTime = newTime;
+    mediaElement.currentTime = newTime;
     setCurrentTime(newTime);
   };
 
   const handleVolumeChange = (e: React.MouseEvent<HTMLDivElement>) => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const newVolume = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
     setVolume(newVolume);
+    mediaElement.volume = newVolume / 100;
     setIsMuted(false);
+    mediaElement.muted = false;
   };
 
-
   const changePlaybackRate = (rate: number) => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
     const clampedRate = Math.max(0.25, Math.min(2, rate));
     setPlaybackRate(clampedRate);
+    mediaElement.playbackRate = clampedRate;
   };
 
   const formatTime = (time: number) => {
@@ -528,21 +611,25 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       {/* Media Content */}
       <div className="relative w-full h-full flex items-center justify-center">
         {/* Video Player */}
-        {isVideo && media.url && (
+        {isVideo && (
           <video
             ref={videoRef}
-            src={media.url}
             className="w-full h-full object-contain"
             poster={media.image !== '/placeholder.svg' ? media.image : undefined}
             preload="metadata"
             playsInline
+            controls={false} // Hide native controls
           />
         )}
 
         {/* Audio Player with Visualization */}
-        {isAudio && media.url && (
+        {isAudio && (
           <div className="w-full h-full flex items-center justify-center relative">
-            <audio ref={audioRef} src={media.url} preload="metadata" />
+            <audio 
+              ref={audioRef} 
+              preload="metadata" 
+              controls={false} // Hide native controls
+            />
             <div 
               className="w-full h-full bg-cover bg-center relative"
               style={{ 
@@ -555,19 +642,16 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                 <div className="text-center">
                   <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mb-6 mx-auto backdrop-blur-sm">
                     {isPlaying ? (
-                      <div className="w-16 h-16 relative">
-                        <div className="absolute inset-0 border-4 border-white/30 rounded-full"></div>
-                        <div 
-                          className="absolute inset-0 border-4 border-white border-t-transparent rounded-full animate-spin"
-                          style={{ animationDuration: '2s' }}
-                        ></div>
-                      </div>
+                      <Pause className="w-16 h-16 text-white" />
                     ) : (
-                      <Play className="w-16 h-16 text-white" />
+                      <Play className="w-16 h-16 text-white ml-2" />
                     )}
                   </div>
                   <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
-                  <p className="text-white/80">Audio Playback</p>
+                  <p className="text-white/70">
+                    {media.year && `${media.year} • `}
+                    {media.duration || 'Audio'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -576,27 +660,27 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
         {/* Image Viewer */}
         {isImage && (
-          <div className="w-full h-full flex items-center justify-center p-4">
-            <img 
-              src={media.url || media.image} 
-              alt={media.title}
-              className="max-w-full max-h-full object-contain"
-            />
-          </div>
-        )}
-
-        {/* Loading Indicator */}
-        {isBuffering && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-40">
-            <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-          </div>
+          <img 
+            src={media.image} 
+            alt={media.title}
+            className="max-w-full max-h-full object-contain"
+          />
         )}
       </div>
 
-      {/* Media Controls - Netflix-style with proper visibility */}
-      {(isVideo || isAudio) && (
+      {/* Loading/Buffering Indicator */}
+      {isBuffering && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg p-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent"></div>
+          </div>
+        </div>
+      )}
+
+      {/* Controls Overlay */}
+      {!isImage && (
         <div 
-          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 z-50 ${
+          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 ${
             showControls ? 
               'opacity-100 translate-y-0' : 
               'opacity-0 translate-y-full pointer-events-none'
@@ -745,26 +829,27 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
       {/* Next Episode Overlay */}
       {showNextEpisode && nextEpisode && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-60">
-          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-8 max-w-md mx-4 text-center">
-            <h3 className="text-2xl font-bold text-white mb-4">Next Episode</h3>
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-60">
+          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 max-w-md w-full text-center">
+            <h3 className="text-2xl font-bold text-white mb-4">Up Next</h3>
             <div className="mb-6">
               <img 
                 src={nextEpisode.image} 
                 alt={nextEpisode.title}
-                className="w-full h-32 object-cover rounded-lg mb-4"
+                className="w-full h-32 object-cover rounded-lg mb-3"
               />
-              <h4 className="text-lg font-semibold text-white">{nextEpisode.title}</h4>
-              {nextEpisode.duration && (
-                <p className="text-white/70 text-sm mt-1">{nextEpisode.duration}</p>
-              )}
+              <h4 className="text-lg font-semibold text-white mb-2">{nextEpisode.title}</h4>
+              <div className="flex items-center justify-center gap-2 text-white/60 text-sm">
+                {nextEpisode.year && <span>{nextEpisode.year}</span>}
+                {nextEpisode.duration && <span>{nextEpisode.duration}</span>}
+              </div>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowNextEpisode(false)}
                 className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
               >
-                Continue Watching
+                Cancel
               </button>
               <button
                 onClick={() => {
