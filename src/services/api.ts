@@ -55,7 +55,18 @@ class ApiService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    // Use the current hostname for network access
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    if (isLocalhost) {
+      this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    } else {
+      // For network access, use the current hostname with port 5000
+      this.baseUrl = `http://${hostname}:5000`;
+    }
+    
+    console.log('API Base URL:', this.baseUrl);
   }
 
   private async request<T>(
@@ -72,18 +83,25 @@ class ApiService {
         ...options,
       });
 
+      const contentType = response.headers.get('content-type');
+      
+      // Check if we got HTML instead of JSON (indicates server redirected to login)
+      if (contentType?.includes('text/html')) {
+        // Server redirected to login page, user is not authenticated
+        if (response.status === 200 && response.url.includes('/login')) {
+          return {
+            success: false,
+            error: 'Authentication required',
+          };
+        }
+      }
+
       // Handle authentication errors properly
       if (response.status === 401) {
-        // Clear any stale local data
-        localStorage.removeItem('username');
-        localStorage.removeItem('isAdmin');
-        
-        // Only redirect if we're not already on login page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
-        }
-        
-        throw new Error('Unauthorized');
+        return {
+          success: false,
+          error: 'Unauthorized',
+        };
       }
 
       const data = await response.json().catch(() => null);

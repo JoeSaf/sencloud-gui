@@ -39,31 +39,70 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      // Always verify with server on app load - don't rely on localStorage cache
+      // Check if we have stored credentials first
+      const storedUsername = localStorage.getItem('username');
+      const storedIsAdmin = localStorage.getItem('isAdmin');
+      
+      if (!storedUsername) {
+        // No stored credentials, user is not logged in
+        setIsLoading(false);
+        return;
+      }
+
       console.log('Checking auth status with server...');
       
+      // Try a simple health check first to avoid HTML responses
+      const healthResponse = await apiService.healthCheck();
+      if (!healthResponse.success) {
+        console.log('Server not reachable, keeping cached auth');
+        // Server not reachable, but we have credentials - keep user logged in
+        setUser({
+          id: '1',
+          username: storedUsername,
+          is_admin: storedIsAdmin === 'true',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Server is reachable, try to verify auth with a protected endpoint
       const response = await apiService.getAdminStats();
-      if (response.success) {
+      if (response.success || (response.data && !response.error)) {
         // Server confirms we're authenticated
         const userData = {
           id: '1',
-          username: localStorage.getItem('username') || 'user',
-          is_admin: localStorage.getItem('isAdmin') === 'true',
+          username: storedUsername,
+          is_admin: storedIsAdmin === 'true',
         };
         setUser(userData);
-        
         console.log('Auth verified - user is authenticated');
       } else {
-        // Server says we're not authenticated
-        console.log('Auth check failed - clearing session');
-        clearAuthData();
+        // Server says we're not authenticated, try a basic API call
+        const filesResponse = await apiService.getFiles();
+        if (filesResponse.success || (filesResponse.data && !filesResponse.error)) {
+          // Basic API works, user is authenticated but might not be admin
+          setUser({
+            id: '1',
+            username: storedUsername,
+            is_admin: false, // Default to non-admin if admin check fails
+          });
+          console.log('Auth verified - user authenticated (non-admin)');
+        } else {
+          console.log('Auth check failed - clearing session');
+          clearAuthData();
+        }
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      // On network error, don't immediately log out - could be temporary
-      // Only clear auth if we get a definitive 401 response
-      if (error instanceof Error && error.message.includes('401')) {
-        clearAuthData();
+      // On network error with stored credentials, keep user logged in
+      const storedUsername = localStorage.getItem('username');
+      if (storedUsername) {
+        console.log('Network error but have credentials, keeping user logged in');
+        setUser({
+          id: '1',
+          username: storedUsername,
+          is_admin: localStorage.getItem('isAdmin') === 'true',
+        });
       }
     } finally {
       setIsLoading(false);
