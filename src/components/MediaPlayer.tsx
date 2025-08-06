@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Enhanced with Netflix-style fullscreen controls
+// src/components/MediaPlayer.tsx - Enhanced with auto-fullscreen and Netflix-style controls
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -86,30 +86,107 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
   const mediaRef = media?.type === 'video' ? videoRef : audioRef;
 
-  // Hide controls after inactivity in fullscreen
+  // Auto-enter fullscreen when media starts playing
+  const autoEnterFullscreen = useCallback(async () => {
+    if (!playerContainerRef.current || hasStartedPlaying) return;
+
+    try {
+      // For mobile devices, request screen orientation lock to landscape
+      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
+        try {
+          await window.screen.orientation.lock('landscape');
+        } catch (error) {
+          console.log('Screen orientation lock not supported or failed:', error);
+        }
+      }
+
+      // Enter fullscreen
+      if (playerContainerRef.current.requestFullscreen) {
+        await playerContainerRef.current.requestFullscreen();
+      }
+      
+      setHasStartedPlaying(true);
+    } catch (error) {
+      console.log('Fullscreen request failed:', error);
+      setHasStartedPlaying(true);
+    }
+  }, [hasStartedPlaying]);
+
+  // Netflix-style control hiding with proper timeout management
   const hideControlsTimer = useCallback(() => {
     if (controlsTimeout) {
       clearTimeout(controlsTimeout);
+      setControlsTimeout(null);
     }
     
-    if (isFullscreen && isPlaying) {
-      const timeout = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-      setControlsTimeout(timeout);
+    // Always show controls when paused or not in fullscreen
+    if (!isPlaying || !isFullscreen) {
+      setShowControls(true);
+      return;
     }
-  }, [isFullscreen, isPlaying, controlsTimeout]);
 
-  // Show controls on mouse movement
+    // Hide controls after 3 seconds of inactivity when playing in fullscreen
+    const timeout = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    setControlsTimeout(timeout);
+  }, [isPlaying, isFullscreen, controlsTimeout]);
+
+  // Show controls and reset timer on mouse movement
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
     hideControlsTimer();
   }, [hideControlsTimer]);
 
-  // Keyboard and mouse event handlers - FIXED VERSION
+  // Handle mouse leave to start hiding timer
+  const handleMouseLeave = useCallback(() => {
+    if (isPlaying && isFullscreen) {
+      hideControlsTimer();
+    }
+  }, [isPlaying, isFullscreen, hideControlsTimer]);
+
+  // Improved close functionality
+  const handleClose = useCallback(() => {
+    // Clear any timeouts
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+      setControlsTimeout(null);
+    }
+
+    // Pause media
+    if (mediaRef.current) {
+      mediaRef.current.pause();
+    }
+
+    // Exit fullscreen if active
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(console.error);
+    }
+
+    // Unlock screen orientation on mobile
+    if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
+      try {
+        window.screen.orientation.unlock();
+      } catch (error) {
+        console.log('Screen orientation unlock failed:', error);
+      }
+    }
+
+    // Reset states
+    setIsPlaying(false);
+    setIsFullscreen(false);
+    setShowControls(true);
+    setHasStartedPlaying(false);
+
+    // Close modal
+    onClose();
+  }, [controlsTimeout, mediaRef, onClose]);
+
+  // Keyboard and mouse event handlers
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isOpen) return;
@@ -143,11 +220,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
           toggleMute();
           break;
         case 'Escape':
-          if (isFullscreen) {
-            exitFullscreen();
-          } else {
-            onClose();
-          }
+          handleClose();
           break;
         case 'Comma':
           if (event.shiftKey) {
@@ -163,21 +236,14 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousemove', handleMouseMove);
     
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousemove', handleMouseMove);
-      if (controlsTimeout) {
-        clearTimeout(controlsTimeout);
-      }
     };
   }, [
     isOpen, 
-    isFullscreen, 
     playbackRate, 
-    handleMouseMove, 
-    controlsTimeout,
+    handleClose,
     isPlaying,
     volume,
     isMuted
@@ -186,13 +252,14 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   // Handle fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const isInFullscreen = !document.fullscreenElement;
+      const isInFullscreen = !!document.fullscreenElement;
       setIsFullscreen(isInFullscreen);
       
       if (!isInFullscreen) {
         setShowControls(true);
         if (controlsTimeout) {
           clearTimeout(controlsTimeout);
+          setControlsTimeout(null);
         }
       } else {
         hideControlsTimer();
@@ -210,17 +277,19 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       setCurrentTime(0);
       setDuration(0);
       setShowControls(true);
+      setHasStartedPlaying(false);
     } else {
       if (mediaRef.current) {
         mediaRef.current.pause();
         setIsPlaying(false);
       }
-      // Exit fullscreen when closing
-      if (isFullscreen) {
-        document.exitFullscreen();
+      // Clean up on close
+      if (controlsTimeout) {
+        clearTimeout(controlsTimeout);
+        setControlsTimeout(null);
       }
     }
-  }, [isOpen, mediaRef, isFullscreen]);
+  }, [isOpen, mediaRef, controlsTimeout]);
 
   // Handle media events
   useEffect(() => {
@@ -238,6 +307,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
     const handleEnded = () => {
       setIsPlaying(false);
+      setShowControls(true);
       if (nextEpisode) {
         setShowNextEpisode(true);
       } else if (recommendedMedia.length > 0) {
@@ -248,9 +318,24 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const handlePlay = () => {
       setIsPlaying(true);
       setIsBuffering(false);
+      // Auto-enter fullscreen on first play
+      if (!hasStartedPlaying) {
+        autoEnterFullscreen();
+      }
+      // Start control hiding timer
+      hideControlsTimer();
     };
     
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      setIsPlaying(false);
+      setShowControls(true);
+      // Clear hiding timer when paused
+      if (controlsTimeout) {
+        clearTimeout(controlsTimeout);
+        setControlsTimeout(null);
+      }
+    };
+
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => setIsBuffering(false);
 
@@ -271,7 +356,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       mediaElement.removeEventListener('waiting', handleWaiting);
       mediaElement.removeEventListener('canplay', handleCanPlay);
     };
-  }, [mediaRef, isOpen, nextEpisode, recommendedMedia]);
+  }, [mediaRef, isOpen, nextEpisode, recommendedMedia, hasStartedPlaying, autoEnterFullscreen, hideControlsTimer, controlsTimeout]);
 
   // Set volume and playback rate
   useEffect(() => {
@@ -280,6 +365,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       mediaRef.current.playbackRate = playbackRate;
     }
   }, [volume, isMuted, playbackRate, mediaRef]);
+
+  // Update controls visibility based on playing state and fullscreen
+  useEffect(() => {
+    hideControlsTimer();
+  }, [isPlaying, isFullscreen, hideControlsTimer]);
 
   const togglePlayPause = () => {
     if (!mediaRef.current) return;
@@ -373,21 +463,20 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   return (
     <div 
       ref={playerContainerRef}
-      className={`fixed inset-0 z-50 bg-black flex items-center justify-center ${
-        isFullscreen ? 'cursor-none' : ''
-      }`}
+      className={`fixed inset-0 z-50 bg-black flex items-center justify-center`}
       style={{ cursor: isFullscreen && !showControls ? 'none' : 'default' }}
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
-      {/* Close Button - Hide in fullscreen unless controls are shown */}
-      {(!isFullscreen || showControls) && (
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-60 p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      )}
+      {/* Close Button - Always visible but with proper styling */}
+      <button
+        onClick={handleClose}
+        className={`absolute top-4 right-4 z-60 p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all duration-300 ${
+          showControls || !isFullscreen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <X className="w-6 h-6" />
+      </button>
 
       {/* Media Content */}
       <div className="relative w-full h-full flex items-center justify-center">
@@ -399,6 +488,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             className="w-full h-full object-contain"
             poster={media.image !== '/placeholder.svg' ? media.image : undefined}
             preload="metadata"
+            playsInline
           />
         )}
 
@@ -450,22 +540,23 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
         {/* Loading Indicator */}
         {isBuffering && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-40">
             <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
           </div>
         )}
       </div>
 
-      {/* Media Controls - Only show for video/audio */}
+      {/* Media Controls - Netflix-style with proper visibility */}
       {(isVideo || isAudio) && (
         <div 
-          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent transition-all duration-300 ${
-            showControls && !isImage ? 
+          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 z-50 ${
+            showControls ? 
               'opacity-100 translate-y-0' : 
               'opacity-0 translate-y-full pointer-events-none'
-          }`}>
+          }`}
+        >
           {/* Progress Bar */}
-          <div className="px-6 pt-4">
+          <div className="px-6 pt-8 pb-4">
             <div 
               className="w-full h-2 bg-white/20 rounded-full cursor-pointer group"
               onClick={handleSeek}
@@ -607,7 +698,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
       {/* Next Episode Overlay */}
       {showNextEpisode && nextEpisode && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-60">
           <div className="bg-black/90 backdrop-blur-sm rounded-xl p-8 max-w-md mx-4 text-center">
             <h3 className="text-2xl font-bold text-white mb-4">Next Episode</h3>
             <div className="mb-6">
@@ -644,7 +735,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
       {/* Recommendations Overlay */}
       {showRecommendations && recommendedMedia.length > 0 && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-60">
           <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-bold text-white">You might also like</h3>
@@ -675,8 +766,8 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                       <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium line-clamp-2 text-gray-900">{item.title}</h4>
-                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                  <h4 className="text-sm font-medium line-clamp-2 text-white">{item.title}</h4>
+                  <div className="flex items-center gap-2 text-xs text-white/60 mt-1">
                     {item.year && <span>{item.year}</span>}
                     {item.duration && <span>{item.duration}</span>}
                   </div>
@@ -687,9 +778,9 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         </div>
       )}
 
-      {/* Keyboard shortcuts hint - Only show when not in fullscreen */}
+      {/* Keyboard shortcuts hint */}
       {!isFullscreen && (
-        <div className="absolute bottom-4 left-4 text-white/50 text-xs">
+        <div className="absolute bottom-4 left-4 text-white/50 text-xs z-50">
           <div className="bg-black/50 backdrop-blur-sm rounded px-2 py-1">
             Press F for fullscreen • Space to play/pause • ← → to seek
           </div>
