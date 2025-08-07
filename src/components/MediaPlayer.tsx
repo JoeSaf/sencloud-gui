@@ -110,11 +110,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
   // Auto-enter fullscreen when media starts playing - FIXED
   const autoEnterFullscreen = useCallback(async () => {
-    if (!playerContainerRef.current || hasStartedPlaying || !isPlaying) return;
-
-    // Store playing state before fullscreen
-    const mediaElement = getCurrentMediaElement();
-    const wasPlaying = mediaElement && !mediaElement.paused;
+    if (!playerContainerRef.current || hasStartedPlaying) return;
 
     try {
       // For mobile devices, request screen orientation lock to landscape
@@ -132,20 +128,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       // Enter fullscreen
       if (playerContainerRef.current.requestFullscreen) {
         await playerContainerRef.current.requestFullscreen();
-        
-        // Ensure playback continues after auto-fullscreen
-        if (wasPlaying && mediaElement) {
-          setTimeout(() => {
-            if (mediaElement.paused) {
-              const playPromise = mediaElement.play();
-              if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                  console.log('Resume play after auto-fullscreen failed:', error);
-                });
-              }
-            }
-          }, 100);
-        }
       }
       
       setHasStartedPlaying(true);
@@ -153,7 +135,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       console.log('Fullscreen request failed:', error);
       setHasStartedPlaying(true);
     }
-  }, [hasStartedPlaying, isPlaying, getCurrentMediaElement]);
+  }, [hasStartedPlaying]);
 
   // Netflix-style control hiding with proper timeout management
   const hideControlsTimer = useCallback(() => {
@@ -193,26 +175,26 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
-    if (mediaElement.paused) {
+    if (isPlaying) {
+      mediaElement.pause();
+    } else {
       const playPromise = mediaElement.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
           console.log('Play failed:', error);
         });
       }
-    } else {
-      mediaElement.pause();
     }
-  }, [getCurrentMediaElement]);
+  }, [isPlaying, getCurrentMediaElement]);
 
   const toggleMute = useCallback(() => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
-    const newMuted = !mediaElement.muted;
+    const newMuted = !isMuted;
     mediaElement.muted = newMuted;
     setIsMuted(newMuted);
-  }, [getCurrentMediaElement]);
+  }, [isMuted, getCurrentMediaElement]);
 
   const adjustVolume = useCallback((delta: number) => {
     const mediaElement = getCurrentMediaElement();
