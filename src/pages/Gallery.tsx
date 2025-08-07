@@ -1,5 +1,5 @@
 // src/pages/Gallery.tsx - Updated navigation section
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import MediaCarousel from '../components/MediaCarousel';
@@ -62,26 +62,32 @@ const Gallery: React.FC = () => {
     };
   };
 
-  // Process media files
+  // Process media files with memoization
   const mediaFiles = mediaResponse?.success ? mediaResponse.data || [] : [];
-  const allMedia = mediaFiles.map(transformMediaFile);
+  const allMedia = useMemo(() => mediaFiles.map(transformMediaFile), [mediaFiles]);
 
-  // Group files by directory
-  const mediaByDirectory: { [key: string]: { [type: string]: MediaItem[] } } = {};
-  
-  mediaFiles.forEach(file => {
-    const directory = file.folder || 'Root';
-    const type = file.type;
+  // Group files by directory with memoization
+  const mediaByDirectory = useMemo(() => {
+    const result: { [key: string]: { [type: string]: MediaItem[] } } = {};
     
-    if (!mediaByDirectory[directory]) {
-      mediaByDirectory[directory] = {};
-    }
-    if (!mediaByDirectory[directory][type]) {
-      mediaByDirectory[directory][type] = [];
-    }
+    allMedia.forEach(item => {
+      // Extract directory from the item id (path)
+      const pathParts = item.id.split('/');
+      const directory = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : 'Root';
+      const type = item.type || 'unknown';
+      
+      if (!result[directory]) {
+        result[directory] = {};
+      }
+      if (!result[directory][type]) {
+        result[directory][type] = [];
+      }
+      
+      result[directory][type].push(item);
+    });
     
-    mediaByDirectory[directory][type].push(transformMediaFile(file));
-  });
+    return result;
+  }, [allMedia]);
 
   // Set featured media
   useEffect(() => {
@@ -93,8 +99,13 @@ const Gallery: React.FC = () => {
     }
   }, [allMedia, featuredMedia]);
 
-  const handleItemClick = async (item: MediaItem) => {
-    if (item.type === 'video') {
+  const handleItemClick = useCallback(async (item: MediaItem) => {
+    // Set initial media immediately to avoid delays
+    setSelectedMedia(item);
+    setIsPlayerOpen(true);
+    
+    // Enhance with video info if needed (but don't re-set if same item)
+    if (item.type === 'video' && item.duration === 'Unknown') {
       try {
         const videoInfo = await apiService.getVideoInfo(item.id);
         if (videoInfo.success && videoInfo.data) {
@@ -104,56 +115,49 @@ const Gallery: React.FC = () => {
               ? `${Math.floor(videoInfo.data.duration / 3600)}h ${Math.floor((videoInfo.data.duration % 3600) / 60)}m`
               : item.duration,
           };
-          setSelectedMedia(enhancedItem);
-        } else {
-          setSelectedMedia(item);
+          // Only update if the selected media is still the same item
+          setSelectedMedia(current => current?.id === item.id ? enhancedItem : current);
         }
       } catch (error) {
         console.error('Error fetching video info:', error);
-        setSelectedMedia(item);
       }
-    } else {
-      setSelectedMedia(item);
     }
-    
-    setIsPlayerOpen(true);
-  };
+  }, []);
 
-  // Get next episode (sample logic - finds next item in same folder/genre)
-  const getNextEpisode = (currentItem: MediaItem | null) => {
-    if (!currentItem) return null;
+  // Memoized next episode
+  const nextEpisode = useMemo(() => {
+    if (!selectedMedia) return null;
     
     const sameTypeMedia = allMedia.filter(item => 
-      item.type === currentItem.type && 
-      item.genre === currentItem.genre &&
-      item.id !== currentItem.id
+      item.type === selectedMedia.type && 
+      item.genre === selectedMedia.genre &&
+      item.id !== selectedMedia.id
     );
     
     return sameTypeMedia.length > 0 ? sameTypeMedia[0] : null;
-  };
+  }, [selectedMedia, allMedia]);
 
-  // Get recommended media (sample logic - similar type/genre)
-  const getRecommendedMedia = (currentItem: MediaItem | null) => {
-    if (!currentItem) return [];
+  // Memoized recommended media
+  const recommendedMedia = useMemo(() => {
+    if (!selectedMedia) return [];
     
     return allMedia
       .filter(item => 
-        item.id !== currentItem.id && 
-        (item.type === currentItem.type || item.genre === currentItem.genre)
+        item.id !== selectedMedia.id && 
+        (item.type === selectedMedia.type || item.genre === selectedMedia.genre)
       )
       .slice(0, 8);
-  };
+  }, [selectedMedia, allMedia]);
 
-  const handleNextEpisode = () => {
-    const nextEpisode = getNextEpisode(selectedMedia);
+  const handleNextEpisode = useCallback(() => {
     if (nextEpisode) {
       handleItemClick(nextEpisode);
     }
-  };
+  }, [nextEpisode, handleItemClick]);
 
-  const handleRecommendedSelect = (item: MediaItem) => {
+  const handleRecommendedSelect = useCallback((item: MediaItem) => {
     handleItemClick(item);
-  };
+  }, [handleItemClick]);
 
   const handleFeaturedPlay = () => {
     if (featuredMedia) {
@@ -388,9 +392,9 @@ const Gallery: React.FC = () => {
         isOpen={isPlayerOpen}
         onClose={() => setIsPlayerOpen(false)}
         media={selectedMedia}
-        nextEpisode={getNextEpisode(selectedMedia)}
+        nextEpisode={nextEpisode}
         onNextEpisode={handleNextEpisode}
-        recommendedMedia={getRecommendedMedia(selectedMedia)}
+        recommendedMedia={recommendedMedia}
         onRecommendedSelect={handleRecommendedSelect}
       />
     </div>
