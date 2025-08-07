@@ -193,26 +193,26 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
-    if (isPlaying) {
-      mediaElement.pause();
-    } else {
+    if (mediaElement.paused) {
       const playPromise = mediaElement.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
           console.log('Play failed:', error);
         });
       }
+    } else {
+      mediaElement.pause();
     }
-  }, [isPlaying, getCurrentMediaElement]);
+  }, [getCurrentMediaElement]);
 
   const toggleMute = useCallback(() => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
-    const newMuted = !isMuted;
+    const newMuted = !mediaElement.muted;
     mediaElement.muted = newMuted;
     setIsMuted(newMuted);
-  }, [isMuted, getCurrentMediaElement]);
+  }, [getCurrentMediaElement]);
 
   const adjustVolume = useCallback((delta: number) => {
     const mediaElement = getCurrentMediaElement();
@@ -353,13 +353,9 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isInFullscreen = !!document.fullscreenElement;
-      const wasFullscreen = isFullscreen;
       setIsFullscreen(isInFullscreen);
       
-      // Store current playing state
-      const mediaElement = getCurrentMediaElement();
-      const shouldBePlaying = mediaElement && !mediaElement.paused;
-      
+      // Always show controls when not in fullscreen
       if (!isInFullscreen) {
         setShowControls(true);
         if (controlsTimeout) {
@@ -367,28 +363,15 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
           setControlsTimeout(null);
         }
       } else {
+        // In fullscreen, manage control visibility properly
+        setShowControls(true);
         hideControlsTimer();
-      }
-      
-      // Ensure video continues playing after fullscreen change
-      if (mediaElement && shouldBePlaying) {
-        // Small delay to ensure DOM has updated
-        setTimeout(() => {
-          if (mediaElement.paused) {
-            const playPromise = mediaElement.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(error => {
-                console.log('Resume play after fullscreen change failed:', error);
-              });
-            }
-          }
-        }, 50);
       }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [hideControlsTimer, controlsTimeout, isFullscreen, getCurrentMediaElement]);
+  }, [hideControlsTimer, controlsTimeout]);
 
   // Reset state when modal opens/closes and handle autoplay - FIXED
   useEffect(() => {

@@ -423,7 +423,7 @@ const Upload: React.FC = () => {
 
       {/* Upload Zone */}
       <div
-        className={`upload-zone mb-6 ${dragOver ? 'dragover' : ''}`}
+        className={`upload-zone mb-6 cursor-pointer ${dragOver ? 'dragover' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
