@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Fixed version with working controls and autoplay
+// src/components/MediaPlayer.tsx - Fixed version with stable fullscreen playback
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -108,11 +108,14 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     onClose();
   }, [getCurrentMediaElement, onClose]);
 
-  // Auto-enter fullscreen when media starts playing - FIXED
+  // Fixed auto-enter fullscreen function
   const autoEnterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current || hasStartedPlaying) return;
 
     try {
+      // Set hasStartedPlaying immediately to prevent multiple attempts
+      setHasStartedPlaying(true);
+
       // For mobile devices, request screen orientation lock to landscape
       if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
         try {
@@ -129,11 +132,8 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       if (playerContainerRef.current.requestFullscreen) {
         await playerContainerRef.current.requestFullscreen();
       }
-      
-      setHasStartedPlaying(true);
     } catch (error) {
       console.log('Fullscreen request failed:', error);
-      setHasStartedPlaying(true);
     }
   }, [hasStartedPlaying]);
 
@@ -170,7 +170,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
-  // Media control functions - FIXED
+  // Media control functions
   const togglePlayPause = useCallback(() => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
@@ -216,58 +216,26 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     setCurrentTime(newTime);
   }, [getCurrentMediaElement, duration, currentTime]);
 
+  // Simplified fullscreen functions
   const enterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current) return;
     
-    // Store playing state before fullscreen change
-    const mediaElement = getCurrentMediaElement();
-    const wasPlaying = mediaElement && !mediaElement.paused;
-    
     try {
       await playerContainerRef.current.requestFullscreen();
-      
-      // Resume playback if it was playing before fullscreen
-      if (wasPlaying && mediaElement) {
-        // Small delay to ensure fullscreen transition completes
-        setTimeout(() => {
-          const playPromise = mediaElement.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(error => {
-              console.log('Resume play after fullscreen failed:', error);
-            });
-          }
-        }, 100);
-      }
     } catch (error) {
       console.log('Fullscreen failed:', error);
     }
-  }, [getCurrentMediaElement]);
+  }, []);
 
   const exitFullscreen = useCallback(async () => {
-    // Store playing state before exiting fullscreen
-    const mediaElement = getCurrentMediaElement();
-    const wasPlaying = mediaElement && !mediaElement.paused;
-    
     try {
       if (document.exitFullscreen) {
         await document.exitFullscreen();
-        
-        // Resume playback if it was playing before exit
-        if (wasPlaying && mediaElement) {
-          setTimeout(() => {
-            const playPromise = mediaElement.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(error => {
-                console.log('Resume play after exit fullscreen failed:', error);
-              });
-            }
-          }, 100);
-        }
       }
     } catch (error) {
       console.log('Exit fullscreen failed:', error);
     }
-  }, [getCurrentMediaElement]);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (isFullscreen) {
@@ -331,7 +299,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, isFullscreen, exitFullscreen, handleClose]);
 
-  // Handle fullscreen changes - FIXED to maintain playback
+  // Handle fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isInFullscreen = !!document.fullscreenElement;
@@ -355,7 +323,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [hideControlsTimer, controlsTimeout]);
 
-  // Reset state when modal opens/closes and handle autoplay - FIXED
+  // Reset state when modal opens/closes and handle autoplay
   useEffect(() => {
     if (isOpen && media) {
       setIsPlaying(false);
@@ -385,7 +353,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
                 })
                 .catch(error => {
                   console.log('Auto-play prevented by browser:', error);
-                  // Show a play button overlay or toast to inform user
                 });
             }
           }, 200);
@@ -410,7 +377,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, [isOpen, media, getCurrentMediaElement, controlsTimeout]);
 
-  // Handle media events - FIXED
+  // Handle media events
   useEffect(() => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement || !isOpen) return;
@@ -437,10 +404,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const handlePlay = () => {
       setIsPlaying(true);
       setIsBuffering(false);
-      // Auto-enter fullscreen on first play
+      
+      // Only attempt fullscreen if we haven't started playing yet
       if (!hasStartedPlaying) {
         autoEnterFullscreen();
       }
+      
       // Start control hiding timer
       hideControlsTimer();
     };
@@ -487,7 +456,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     };
   }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia, hasStartedPlaying, autoEnterFullscreen, hideControlsTimer, controlsTimeout]);
 
-  // Set volume and playback rate - FIXED
+  // Set volume and playback rate
   useEffect(() => {
     const mediaElement = getCurrentMediaElement();
     if (mediaElement) {
@@ -583,7 +552,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             poster={media.image !== '/placeholder.svg' ? media.image : undefined}
             preload="metadata"
             playsInline
-            controls={false} // Hide native controls
+            controls={false}
           />
         )}
 
@@ -593,7 +562,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             <audio 
               ref={audioRef} 
               preload="metadata" 
-              controls={false} // Hide native controls
+              controls={false}
             />
             <div 
               className="w-full h-full bg-cover bg-center relative"

@@ -1593,11 +1593,17 @@ def filesize_filter(size):
         size /= 1024.0
     return f"{size:.1f} TB"
 
+def ensure_thumbnail_dir():
+    thumbnails_dir = os.path.join(app.static_folder, 'thumbnails')
+    if not os.path.exists(thumbnails_dir):
+        os.makedirs(thumbnails_dir)
+    return thumbnails_dir
+
 if __name__ == '__main__':
     # Ensure required directories exist
     ensure_directory(Config.UPLOAD_FOLDER)
     ensure_directory(os.path.join(app.static_folder, 'thumbnails'))
-    
+    ensure_thumbnail_dir()
     # Run the app
     app.run(
         host='0.0.0.0',  # Listen on all interfaces
