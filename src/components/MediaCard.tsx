@@ -26,6 +26,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
           src={image}
           alt={title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            if (target.src !== '/placeholder.svg') {
+              target.src = '/placeholder.svg';
+            }
+          }}
         />
         
         {/* Overlay on Hover */}

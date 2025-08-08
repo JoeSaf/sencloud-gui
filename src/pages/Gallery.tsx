@@ -229,11 +229,11 @@ const Gallery: React.FC = () => {
         <div className="absolute inset-0 bg-black/50"></div>
         <div className="relative z-10 text-center max-w-4xl px-4 sm:px-6">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-6 drop-shadow-lg">
-            {featuredMedia?.title || 'Welcome to SenKloud'}
+            Recently Added Media
           </h1>
           <p className="text-base sm:text-lg lg:text-xl text-gray-200 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             {featuredMedia 
-              ? `Enjoy your ${featuredMedia.type} collection with seamless streaming and beautiful interface.`
+              ? `Now playing: ${featuredMedia.title}`
               : 'Your personal media streaming platform. Upload, organize, and enjoy your content anywhere.'
             }
           </p>
@@ -315,6 +315,12 @@ const Gallery: React.FC = () => {
                           alt={item.title}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                           loading="lazy"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (target.src !== '/placeholder.svg') {
+                              target.src = '/placeholder.svg';
+                            }
+                          }}
                         />
                         
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
