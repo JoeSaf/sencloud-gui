@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Clean version without autoplay
+// src/components/MediaPlayer.tsx - Complete Fixed Version
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -72,6 +72,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null); // ✅ Use ref instead of state
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -80,7 +81,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const [volume, setVolume] = useState(75);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showNextEpisode, setShowNextEpisode] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -104,62 +104,79 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       mediaElement.pause();
       setIsPlaying(false);
     }
+    // Clear timeout on close
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
     onClose();
   }, [getCurrentMediaElement, onClose]);
 
-  // Netflix-style control hiding with proper timeout management
-  const hideControlsTimer = useCallback(() => {
-    if (controlsTimeout) {
-      clearTimeout(controlsTimeout);
-      setControlsTimeout(null);
-    }
-    
-    // Always show controls when paused or not in fullscreen
-    if (!isPlaying || !isFullscreen) {
-      setShowControls(true);
-      return;
-    }
-
-    // Hide controls after 3 seconds of inactivity when playing in fullscreen
-    const timeout = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
-    setControlsTimeout(timeout);
-  }, [isPlaying, isFullscreen, controlsTimeout]);
-
-  // Show controls and reset timer on mouse movement
+  // Fixed mouse event handlers
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
-    hideControlsTimer();
-  }, [hideControlsTimer]);
-
-  // Handle mouse leave to start hiding timer
-  const handleMouseLeave = useCallback(() => {
-    if (isPlaying && isFullscreen) {
-      hideControlsTimer();
+    
+    // Only start hiding controls if in fullscreen and playing
+    if (isFullscreen && isPlaying) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+      
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
     }
-  }, [isPlaying, isFullscreen, hideControlsTimer]);
+  }, [isFullscreen, isPlaying]);
 
-  // Media control functions
+  const handleMouseLeave = useCallback(() => {
+    // Only hide controls if in fullscreen, playing, and not interacting
+    if (isFullscreen && isPlaying) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+      
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 1000); // Shorter timeout for mouse leave
+    }
+  }, [isFullscreen, isPlaying]);
+
+  // Fixed togglePlayPause
   const togglePlayPause = useCallback(async () => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
     try {
+      // Temporarily disable control hiding to prevent interference
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+      
       if (mediaElement.paused) {
-        // Media is paused, so play it
+        console.log('Attempting to play media...');
         const playPromise = mediaElement.play();
         if (playPromise !== undefined) {
           await playPromise;
         }
       } else {
-        // Media is playing, so pause it
+        console.log('Pausing media...');
         mediaElement.pause();
       }
+      
+      // Re-enable control hiding logic after a brief delay
+      setTimeout(() => {
+        if (isPlaying && isFullscreen) {
+          handleMouseMove(); // Use existing mouse move logic
+        }
+      }, 100);
+      
     } catch (error) {
       console.log('Play/Pause failed:', error);
     }
-  }, [getCurrentMediaElement]);
+  }, [getCurrentMediaElement, isPlaying, isFullscreen, handleMouseMove]);
 
   const toggleMute = useCallback(() => {
     const mediaElement = getCurrentMediaElement();
@@ -273,29 +290,33 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, isFullscreen, exitFullscreen, handleClose]);
 
-  // Handle fullscreen changes
+  // Fixed fullscreen change handler
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isInFullscreen = !!document.fullscreenElement;
+      console.log('Fullscreen changed:', isInFullscreen);
       setIsFullscreen(isInFullscreen);
       
       // Always show controls when not in fullscreen
       if (!isInFullscreen) {
         setShowControls(true);
-        if (controlsTimeout) {
-          clearTimeout(controlsTimeout);
-          setControlsTimeout(null);
+        if (controlsTimeoutRef.current) {
+          clearTimeout(controlsTimeoutRef.current);
+          controlsTimeoutRef.current = null;
         }
       } else {
-        // In fullscreen, manage control visibility properly
+        // In fullscreen, show controls initially then manage visibility
         setShowControls(true);
-        hideControlsTimer();
+        // Only start hiding timer if media is playing
+        if (isPlaying) {
+          setTimeout(() => handleMouseMove(), 500); // Small delay to prevent conflicts
+        }
       }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [hideControlsTimer, controlsTimeout]);
+  }, [isPlaying, handleMouseMove]);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -307,6 +328,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       setShowNextEpisode(false);
       setShowRecommendations(false);
       setShowSettings(false);
+      
+      // Clear any existing timeouts
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
       
       // Set up media source without autoplay
       const mediaElement = getCurrentMediaElement();
@@ -322,14 +349,14 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         setIsPlaying(false);
       }
       
-      if (controlsTimeout) {
-        clearTimeout(controlsTimeout);
-        setControlsTimeout(null);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
       }
     }
-  }, [isOpen, media, getCurrentMediaElement, controlsTimeout]);
+  }, [isOpen, media, getCurrentMediaElement]);
 
-  // Handle media events
+  // Fixed media event handlers
   useEffect(() => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement || !isOpen) return;
@@ -346,6 +373,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     const handleEnded = () => {
       setIsPlaying(false);
       setShowControls(true);
+      // Clear any hiding timers when media ends
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+      
       if (nextEpisode) {
         setShowNextEpisode(true);
       } else if (recommendedMedia.length > 0) {
@@ -354,22 +387,23 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     };
 
     const handlePlay = () => {
-      console.log('Media play event fired');
+      console.log('Media play event fired - setting isPlaying to true');
       setIsPlaying(true);
       setIsBuffering(false);
       
-      // Start control hiding timer
-      hideControlsTimer();
+      // Don't immediately start hiding controls - wait for user interaction to stop
+      setShowControls(true);
     };
     
     const handlePause = () => {
-      console.log('Media pause event fired');
+      console.log('Media pause event fired - setting isPlaying to false');
       setIsPlaying(false);
       setShowControls(true);
+      
       // Clear hiding timer when paused
-      if (controlsTimeout) {
-        clearTimeout(controlsTimeout);
-        setControlsTimeout(null);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
       }
     };
 
@@ -380,6 +414,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       console.error('Media error:', e);
       setIsBuffering(false);
       setIsPlaying(false);
+      setShowControls(true);
     };
 
     // Add all event listeners
@@ -393,7 +428,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     mediaElement.addEventListener('error', handleError);
 
     return () => {
-      // Remove all event listeners
+      // Clean up all event listeners
       if (mediaElement) {
         mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
         mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
@@ -405,7 +440,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         mediaElement.removeEventListener('error', handleError);
       }
     };
-  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia.length, hideControlsTimer, controlsTimeout]);
+  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia.length]);
 
   // Set volume and playback rate
   useEffect(() => {
@@ -416,11 +451,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       mediaElement.playbackRate = playbackRate;
     }
   }, [volume, isMuted, playbackRate, getCurrentMediaElement]);
-
-  // Update controls visibility based on playing state and fullscreen
-  useEffect(() => {
-    hideControlsTimer();
-  }, [isPlaying, isFullscreen, hideControlsTimer]);
 
   // Event handlers
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -483,12 +513,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Close Button */}
+      {/* Close Button - Always Active */}
       <button
         onClick={handleClose}
-        className={`absolute top-4 right-4 z-60 p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all duration-300 ${
-          showControls || !isFullscreen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
+        className="fixed top-4 right-4 z-[100] p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all duration-300 opacity-100 cursor-pointer"
+        style={{ pointerEvents: 'all' }} // Force pointer events always active
+        title="Close Player"
       >
         <X className="w-6 h-6" />
       </button>
