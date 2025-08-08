@@ -273,10 +273,10 @@ const Gallery: React.FC = () => {
     );
   }
 
-  // Get recent items (last 3 most recent)
+  // Get recent items (last 10)
   const recentItems = allMedia
     .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
-    .slice(0, 3);
+    .slice(0, 10);
 
   return (
     <div className="min-h-screen bg-background">
