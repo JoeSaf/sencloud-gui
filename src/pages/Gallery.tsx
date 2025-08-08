@@ -89,7 +89,21 @@ const Gallery: React.FC = () => {
     return result;
   }, [allMedia]);
 
-  // Set featured media
+  // Get last watched media from localStorage
+  const getLastWatchedMedia = () => {
+    try {
+      const lastWatched = localStorage.getItem('lastWatchedMedia');
+      if (lastWatched) {
+        const parsed = JSON.parse(lastWatched);
+        return allMedia.find(item => item.id === parsed.id);
+      }
+    } catch (error) {
+      console.error('Error getting last watched media:', error);
+    }
+    return null;
+  };
+
+  // Set featured media and get most recent
   useEffect(() => {
     if (allMedia.length > 0 && !featuredMedia) {
       const recentVideo = allMedia
@@ -99,10 +113,33 @@ const Gallery: React.FC = () => {
     }
   }, [allMedia, featuredMedia]);
 
+  // Get most recently added media
+  const mostRecentMedia = useMemo(() => {
+    if (allMedia.length === 0) return null;
+    return allMedia
+      .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))[0];
+  }, [allMedia]);
+
+  // Get last watched media
+  const lastWatchedMedia = useMemo(() => {
+    return getLastWatchedMedia();
+  }, [allMedia]);
+
   const handleItemClick = useCallback(async (item: MediaItem) => {
     // Set initial media immediately to avoid delays
     setSelectedMedia(item);
     setIsPlayerOpen(true);
+    
+    // Save to localStorage for continue watching
+    try {
+      localStorage.setItem('lastWatchedMedia', JSON.stringify({
+        id: item.id,
+        title: item.title,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.error('Error saving last watched media:', error);
+    }
     
     // Enhance with video info if needed (but don't re-set if same item)
     if (item.type === 'video' && item.duration === 'Unknown') {
@@ -229,11 +266,11 @@ const Gallery: React.FC = () => {
         <div className="absolute inset-0 bg-black/50"></div>
         <div className="relative z-10 text-center max-w-4xl px-4 sm:px-6">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-6 drop-shadow-lg">
-            Recently Added Media
+            {mostRecentMedia ? mostRecentMedia.title : 'Recently Added Media'}
           </h1>
           <p className="text-base sm:text-lg lg:text-xl text-gray-200 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            {featuredMedia 
-              ? `Now playing: ${featuredMedia.title}`
+            {lastWatchedMedia 
+              ? `Continue watching: ${lastWatchedMedia.title}`
               : 'Your personal media streaming platform. Upload, organize, and enjoy your content anywhere.'
             }
           </p>
