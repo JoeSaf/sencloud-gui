@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Fixed version with stable fullscreen playback
+// src/components/MediaPlayer.tsx - Clean version without autoplay
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -86,7 +86,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
   // Get current media element reference
   const getCurrentMediaElement = useCallback(() => {
@@ -107,35 +106,6 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
     onClose();
   }, [getCurrentMediaElement, onClose]);
-
-  // Fixed auto-enter fullscreen function
-  const autoEnterFullscreen = useCallback(async () => {
-    if (!playerContainerRef.current || hasStartedPlaying) return;
-
-    try {
-      // Set hasStartedPlaying immediately to prevent multiple attempts
-      setHasStartedPlaying(true);
-
-      // For mobile devices, request screen orientation lock to landscape
-      if ('screen' in window && 'orientation' in window.screen && window.screen.orientation) {
-        try {
-          const orientation = window.screen.orientation as any;
-          if (orientation.lock) {
-            await orientation.lock('landscape');
-          }
-        } catch (error) {
-          console.log('Screen orientation lock not supported or failed:', error);
-        }
-      }
-
-      // Enter fullscreen
-      if (playerContainerRef.current.requestFullscreen) {
-        await playerContainerRef.current.requestFullscreen();
-      }
-    } catch (error) {
-      console.log('Fullscreen request failed:', error);
-    }
-  }, [hasStartedPlaying]);
 
   // Netflix-style control hiding with proper timeout management
   const hideControlsTimer = useCallback(() => {
@@ -171,21 +141,25 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   }, [isPlaying, isFullscreen, hideControlsTimer]);
 
   // Media control functions
-  const togglePlayPause = useCallback(() => {
+  const togglePlayPause = useCallback(async () => {
     const mediaElement = getCurrentMediaElement();
     if (!mediaElement) return;
     
-    if (isPlaying) {
-      mediaElement.pause();
-    } else {
-      const playPromise = mediaElement.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log('Play failed:', error);
-        });
+    try {
+      if (mediaElement.paused) {
+        // Media is paused, so play it
+        const playPromise = mediaElement.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
+      } else {
+        // Media is playing, so pause it
+        mediaElement.pause();
       }
+    } catch (error) {
+      console.log('Play/Pause failed:', error);
     }
-  }, [isPlaying, getCurrentMediaElement]);
+  }, [getCurrentMediaElement]);
 
   const toggleMute = useCallback(() => {
     const mediaElement = getCurrentMediaElement();
@@ -216,7 +190,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     setCurrentTime(newTime);
   }, [getCurrentMediaElement, duration, currentTime]);
 
-  // Simplified fullscreen functions
+  // Fullscreen functions
   const enterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current) return;
     
@@ -323,45 +297,23 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [hideControlsTimer, controlsTimeout]);
 
-  // Reset state when modal opens/closes and handle autoplay
+  // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen && media) {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
       setShowControls(true);
-      setHasStartedPlaying(false);
       setShowNextEpisode(false);
       setShowRecommendations(false);
       setShowSettings(false);
       
-      // Wait for the media element to be ready, then attempt autoplay
-      const autoPlayTimer = setTimeout(() => {
-        const mediaElement = getCurrentMediaElement();
-        if (mediaElement && media.url) {
-          // Set the source
-          mediaElement.src = media.url;
-          mediaElement.load(); // Force load
-          
-          // Try to play after a short delay
-          const playTimer = setTimeout(() => {
-            const playPromise = mediaElement.play();
-            if (playPromise !== undefined) {
-              playPromise
-                .then(() => {
-                  console.log('Autoplay successful');
-                })
-                .catch(error => {
-                  console.log('Auto-play prevented by browser:', error);
-                });
-            }
-          }, 200);
-          
-          return () => clearTimeout(playTimer);
-        }
-      }, 100);
-      
-      return () => clearTimeout(autoPlayTimer);
+      // Set up media source without autoplay
+      const mediaElement = getCurrentMediaElement();
+      if (mediaElement && media.url) {
+        mediaElement.src = media.url;
+        mediaElement.load();
+      }
     } else {
       // Clean up when closing
       const mediaElement = getCurrentMediaElement();
@@ -402,19 +354,16 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     };
 
     const handlePlay = () => {
+      console.log('Media play event fired');
       setIsPlaying(true);
       setIsBuffering(false);
-      
-      // Only attempt fullscreen if we haven't started playing yet
-      if (!hasStartedPlaying) {
-        autoEnterFullscreen();
-      }
       
       // Start control hiding timer
       hideControlsTimer();
     };
     
     const handlePause = () => {
+      console.log('Media pause event fired');
       setIsPlaying(false);
       setShowControls(true);
       // Clear hiding timer when paused
@@ -445,16 +394,18 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
     return () => {
       // Remove all event listeners
-      mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
-      mediaElement.removeEventListener('ended', handleEnded);
-      mediaElement.removeEventListener('play', handlePlay);
-      mediaElement.removeEventListener('pause', handlePause);
-      mediaElement.removeEventListener('waiting', handleWaiting);
-      mediaElement.removeEventListener('canplay', handleCanPlay);
-      mediaElement.removeEventListener('error', handleError);
+      if (mediaElement) {
+        mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
+        mediaElement.removeEventListener('ended', handleEnded);
+        mediaElement.removeEventListener('play', handlePlay);
+        mediaElement.removeEventListener('pause', handlePause);
+        mediaElement.removeEventListener('waiting', handleWaiting);
+        mediaElement.removeEventListener('canplay', handleCanPlay);
+        mediaElement.removeEventListener('error', handleError);
+      }
     };
-  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia, hasStartedPlaying, autoEnterFullscreen, hideControlsTimer, controlsTimeout]);
+  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia.length, hideControlsTimer, controlsTimeout]);
 
   // Set volume and playback rate
   useEffect(() => {
@@ -526,13 +477,13 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
 
   return (
     <div 
-      ref={playerContainerRef}
+      ref={playerContainerRef} 
       className={`fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden`}
       style={{ cursor: isFullscreen && !showControls ? 'none' : 'default' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Close Button - Always visible but with proper styling */}
+      {/* Close Button */}
       <button
         onClick={handleClose}
         className={`absolute top-4 right-4 z-60 p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all duration-300 ${
