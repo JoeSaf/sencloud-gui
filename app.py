@@ -41,6 +41,7 @@ class Config:
     JELLYFIN_API_KEY = os.environ.get('JELLYFIN_API_KEY', '')
     THUMBNAIL_SIZE = (300, 300)
     USERS_FILE = 'users.json'
+    FOLDER_THUMBNAILS_FILE = 'folder_thumbnails.json'
     
     # Enhanced video streaming settings
     CHUNK_SIZE = 8192 * 4  # 32KB chunks for better streaming
@@ -331,6 +332,100 @@ def get_all_folder_paths(base_path, max_depth=5):
     
     nested_structure = get_nested_folder_structure(base_path, max_depth)
     return collect_paths(nested_structure)
+
+
+# custom thumbnail logic
+def load_folder_thumbnails():
+    """Load folder thumbnails from persistent storage"""
+    try:
+        if os.path.exists(Config.FOLDER_THUMBNAILS_FILE):
+            with open(Config.FOLDER_THUMBNAILS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading folder thumbnails: {e}")
+    return {}
+
+def save_folder_thumbnails(thumbnails):
+    """Save folder thumbnails to persistent storage"""
+    try:
+        with open(Config.FOLDER_THUMBNAILS_FILE, 'w') as f:
+            json.dump(thumbnails, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving folder thumbnails: {e}")
+        return False
+
+def get_folder_thumbnail(folder_path, file_type):
+    """Get thumbnail for a folder with inheritance logic"""
+    folder_thumbnails = load_folder_thumbnails()
+    
+    # Normalize folder path
+    if folder_path == '' or folder_path == 'Root':
+        folder_key = f"{file_type}/Root"
+    else:
+        folder_key = f"{file_type}/{folder_path}"
+    
+    # Check for exact match first
+    if folder_key in folder_thumbnails:
+        return folder_thumbnails[folder_key]
+    
+    # Check for inheritance from parent folders
+    path_parts = folder_path.split('/') if folder_path != 'Root' else []
+    for i in range(len(path_parts) - 1, -1, -1):
+        parent_path = '/'.join(path_parts[:i]) if i > 0 else 'Root'
+        parent_key = f"{file_type}/{parent_path}"
+        
+        if parent_key in folder_thumbnails:
+            # Check if inheritance is enabled for this parent
+            parent_data = folder_thumbnails[parent_key]
+            if isinstance(parent_data, dict) and parent_data.get('inherit_to_children', False):
+                return parent_data.get('thumbnail_url')
+            elif isinstance(parent_data, str):
+                # Legacy format - assume no inheritance
+                continue
+    
+    # No custom thumbnail found, try to use first image/video in folder
+    return get_auto_folder_thumbnail(folder_path, file_type)
+
+def get_auto_folder_thumbnail(folder_path, file_type):
+    """Generate automatic folder thumbnail from first suitable file"""
+    media_dir = get_media_path(file_type)
+    full_path = os.path.join(media_dir, folder_path) if folder_path != 'Root' else media_dir
+    
+    if not os.path.exists(full_path):
+        return None
+    
+    try:
+        # Get all files in the folder
+        files = []
+        for item in os.listdir(full_path):
+            item_path = os.path.join(full_path, item)
+            if os.path.isfile(item_path):
+                is_allowed, detected_type = allowed_file(item)
+                if is_allowed and detected_type in ['image', 'video']:
+                    files.append((item, detected_type, item_path))
+        
+        # Sort files - prioritize images over videos, then alphabetically
+        files.sort(key=lambda x: (x[1] != 'image', x[0].lower()))
+        
+        if files:
+            _, _, file_path = files[0]
+            # Generate thumbnail hash
+            thumbnail_filename = f"{hashlib.md5(file_path.encode()).hexdigest()}.jpg"
+            thumbnail_path = os.path.join(app.static_folder, 'thumbnails', thumbnail_filename)
+            
+            # Generate thumbnail if it doesn't exist
+            if not os.path.exists(thumbnail_path):
+                if generate_thumbnail(file_path, files[0][1], thumbnail_path):
+                    return thumbnail_filename
+            else:
+                return thumbnail_filename
+    
+    except Exception as e:
+        print(f"Error generating auto folder thumbnail: {e}")
+    
+    return None
+
 
 def scan_media_files(base_path, folder_path=''):
     """Recursively scan media files in a directory"""
@@ -1083,6 +1178,132 @@ def thumbnail(filename):
     if os.path.exists(thumbnail_path):
         return send_file(thumbnail_path)
     abort(404)
+
+@app.route('/api/folder-thumbnail', methods=['POST'])
+@login_required
+def api_upload_folder_thumbnail():
+    """Upload custom thumbnail for a folder"""
+    if 'thumbnail' not in request.files:
+        return jsonify({'error': 'No thumbnail file provided'}), 400
+    
+    file = request.files['thumbnail']
+    folder_path = request.form.get('folder_path', 'Root')
+    file_type = request.form.get('file_type', 'image')
+    inherit_to_children = request.form.get('inherit_to_children', 'false').lower() == 'true'
+    
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Validate image file
+    if not file.content_type.startswith('image/'):
+        return jsonify({'error': 'File must be an image'}), 400
+    
+    try:
+        # Create unique filename for folder thumbnail
+        folder_key = f"{file_type}_{folder_path}".replace('/', '_').replace('\\', '_')
+        timestamp = int(time.time())
+        thumbnail_filename = f"folder_{folder_key}_{timestamp}.jpg"
+        thumbnail_path = os.path.join(app.static_folder, 'thumbnails', thumbnail_filename)
+        
+        # Resize and save thumbnail
+        with Image.open(file.stream) as img:
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail(Config.THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+            img.save(thumbnail_path, 'JPEG', quality=85)
+        
+        # Update folder thumbnails registry
+        folder_thumbnails = load_folder_thumbnails()
+        folder_key = f"{file_type}/{folder_path}"
+        
+        # Remove old thumbnail file if exists
+        if folder_key in folder_thumbnails:
+            old_data = folder_thumbnails[folder_key]
+            old_filename = old_data.get('thumbnail_filename') if isinstance(old_data, dict) else old_data
+            if old_filename and old_filename.startswith('folder_'):
+                old_path = os.path.join(app.static_folder, 'thumbnails', old_filename)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+        
+        # Store new thumbnail data
+        folder_thumbnails[folder_key] = {
+            'thumbnail_filename': thumbnail_filename,
+            'thumbnail_url': url_for('thumbnail', filename=thumbnail_filename),
+            'inherit_to_children': inherit_to_children,
+            'uploaded_at': datetime.now().isoformat()
+        }
+        
+        if save_folder_thumbnails(folder_thumbnails):
+            return jsonify({
+                'message': 'Folder thumbnail uploaded successfully',
+                'thumbnail_url': url_for('thumbnail', filename=thumbnail_filename),
+                'folder_path': folder_path,
+                'inherit_to_children': inherit_to_children
+            })
+        else:
+            return jsonify({'error': 'Failed to save thumbnail data'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to process thumbnail: {str(e)}'}), 500
+
+@app.route('/api/folder-thumbnail', methods=['DELETE'])
+@login_required
+def api_delete_folder_thumbnail():
+    """Delete custom thumbnail for a folder"""
+    data = request.get_json()
+    folder_path = data.get('folder_path', 'Root')
+    file_type = data.get('file_type', 'image')
+    
+    folder_thumbnails = load_folder_thumbnails()
+    folder_key = f"{file_type}/{folder_path}"
+    
+    if folder_key in folder_thumbnails:
+        # Remove thumbnail file
+        old_data = folder_thumbnails[folder_key]
+        old_filename = old_data.get('thumbnail_filename') if isinstance(old_data, dict) else old_data
+        if old_filename and old_filename.startswith('folder_'):
+            old_path = os.path.join(app.static_folder, 'thumbnails', old_filename)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        
+        # Remove from registry
+        del folder_thumbnails[folder_key]
+        
+        if save_folder_thumbnails(folder_thumbnails):
+            return jsonify({'message': 'Folder thumbnail removed successfully'})
+        else:
+            return jsonify({'error': 'Failed to update thumbnail data'}), 500
+    else:
+        return jsonify({'error': 'No custom thumbnail found for this folder'}), 404
+
+@app.route('/api/folder-thumbnail/<file_type>/<path:folder_path>')
+@login_required
+def api_get_folder_thumbnail(file_type, folder_path):
+    """Get thumbnail URL for a folder"""
+    thumbnail_url = get_folder_thumbnail(folder_path, file_type)
+    
+    if thumbnail_url:
+        if thumbnail_url.startswith('http'):
+            return jsonify({'thumbnail_url': thumbnail_url})
+        else:
+            return jsonify({'thumbnail_url': url_for('thumbnail', filename=thumbnail_url)})
+    else:
+        return jsonify({'thumbnail_url': None})
+
+# Modify existing scan_media_files function to include folder thumbnails
+def scan_media_files_enhanced(base_path, folder_path='', file_type=None):
+    """Enhanced version that includes folder thumbnail information"""
+    media_files = scan_media_files(base_path, folder_path)  # Use existing function
+    
+    # Add folder thumbnail information to each file
+    for file_data in media_files:
+        file_folder = file_data.get('folder', 'Root')
+        detected_type = file_data.get('type')
+        
+        # Get folder thumbnail (with inheritance)
+        folder_thumbnail = get_folder_thumbnail(file_folder, detected_type)
+        file_data['folder_thumbnail'] = folder_thumbnail
+    
+    return media_files
 
 @app.route('/admin')
 @login_required
