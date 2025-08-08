@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import MediaCarousel from '../components/MediaCarousel';
 import MediaPlayer from '../components/MediaPlayer';
+import FolderThumbnailUpload from '../components/FolderThumbnailUpload';
 import { apiService, MediaFile } from '../services/api';
 import { Cloud, Play, Info, Loader2, AlertCircle, Folder, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -24,7 +25,20 @@ const Gallery: React.FC = () => {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [featuredMedia, setFeaturedMedia] = useState<MediaItem | null>(null);
+  const [folderThumbnails, setFolderThumbnails] = useState<{[key: string]: string}>({});
   const libraryRef = useRef<HTMLDivElement>(null);
+
+  // Load folder thumbnails from localStorage
+  useEffect(() => {
+    try {
+      const savedThumbnails = localStorage.getItem('folderThumbnails');
+      if (savedThumbnails) {
+        setFolderThumbnails(JSON.parse(savedThumbnails));
+      }
+    } catch (error) {
+      console.error('Error loading folder thumbnails:', error);
+    }
+  }, []);
 
   // Fetch all media files
   const { 
@@ -41,26 +55,31 @@ const Gallery: React.FC = () => {
   const isLoading = mediaLoading;
   const error = mediaError;
 
-  // Transform backend data to frontend format
-  const transformMediaFile = (file: MediaFile): MediaItem => {
+  // Transform backend data to frontend format with folder thumbnails
+  const transformMediaFile = useCallback((file: MediaFile): MediaItem => {
     const baseTitle = file.filename.replace(/\.[^/.]+$/, '');
     const formattedTitle = baseTitle
       .replace(/[-_]/g, ' ')
       .replace(/\b\w/g, (l) => l.toUpperCase());
 
+    // Extract directory from file path for folder thumbnail
+    const pathParts = file.relative_path.split('/');
+    const directory = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : 'Root';
+    const folderThumbnail = folderThumbnails[directory];
+
     return {
       id: file.relative_path,
       title: formattedTitle,
-      image: file.thumbnail 
+      image: folderThumbnail || (file.thumbnail 
         ? apiService.getThumbnailUrl(file.thumbnail)
-        : '/placeholder.svg',
+        : '/placeholder.svg'),
       duration: file.type === 'video' ? 'Unknown' : undefined,
       year: new Date(file.modified).getFullYear().toString(),
       genre: file.type === 'video' ? 'Video' : file.type === 'audio' ? 'Audio' : 'Media',
       type: file.type,
       url: apiService.getStreamUrl(file.relative_path),
     };
-  };
+  }, [folderThumbnails]);
 
   // Process media files with memoization
   const mediaFiles = mediaResponse?.success ? mediaResponse.data || [] : [];
@@ -206,6 +225,13 @@ const Gallery: React.FC = () => {
     libraryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleThumbnailUploaded = useCallback((folderPath: string, thumbnailUrl: string) => {
+    setFolderThumbnails(prev => ({
+      ...prev,
+      [folderPath]: thumbnailUrl
+    }));
+  }, []);
+
   const handleRefresh = () => {
     refetchMedia();
     toast({
@@ -314,6 +340,11 @@ const Gallery: React.FC = () => {
                 <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 {directory === 'Root' ? 'Root Directory' : directory}
               </h2>
+              <FolderThumbnailUpload
+                folderPath={directory}
+                onThumbnailUploaded={handleThumbnailUploaded}
+                existingThumbnail={folderThumbnails[directory]}
+              />
             </div>
 
             {/* Type subcategories within directory */}
