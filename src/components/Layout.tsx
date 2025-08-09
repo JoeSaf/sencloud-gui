@@ -417,7 +417,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           isOpen={isSearchOpen}
           onClose={() => setIsSearchOpen(false)}
           onItemSelect={handleSearchItemSelect}
-          initialQuery={searchQuery}
         />
       )}
 
@@ -429,7 +428,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             setIsPlayerOpen(false);
             setSelectedMedia(null);
           }}
-          mediaItem={selectedMedia}
+          media={selectedMedia}
         />
       )}
     </div>

@@ -121,12 +121,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('Attempting login for user:', username);
       
       const response = await apiService.login(username, password);
-      if (response.success && response.data) {
-        setUser(response.data);
+      const userPayload = (response.data as any)?.user;
+      if (response.success && userPayload) {
+        const u: User = {
+          id: userPayload.id ?? '1',
+          username: userPayload.username,
+          is_admin: Boolean(userPayload.is_admin),
+        };
+        setUser(u);
         
         // Store user data in localStorage for persistence
-        localStorage.setItem('username', response.data.username);
-        localStorage.setItem('isAdmin', response.data.is_admin.toString());
+        localStorage.setItem('username', u.username);
+        localStorage.setItem('isAdmin', u.is_admin.toString());
         
         console.log('Login successful');
         return true;
@@ -149,7 +155,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const response = await apiService.register(userData);
+      const response = await apiService.register(userData.username, userData.password);
       return response.success;
     } catch (error) {
       console.error('Registration failed:', error);

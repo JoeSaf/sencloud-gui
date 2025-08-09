@@ -508,7 +508,7 @@ class ApiService {
       
       return { 
         success: response.success, 
-        thumbnail_url: response.data?.thumbnail_url, 
+        thumbnail_url: (response.data as any)?.thumbnail_url, 
         error: response.error 
       };
     } catch (error) {

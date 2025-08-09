@@ -78,37 +78,23 @@ const FolderThumbnailUpload: React.FC<FolderThumbnailUploadProps> = ({
         formData.append('inherit_to_children', inheritToChildren.toString());
 
         // Upload to backend using fetch with better error handling
-        const response = await fetch(`${apiService.baseUrl || window.location.origin}/api/folder-thumbnail`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include'
-        });
+        const result = await apiService.uploadFolderThumbnail(
+          file,
+          folderPath,
+          fileType,
+          inheritToChildren
+        );
 
-        // Handle response properly
-        let result;
-        const text = await response.text();
-        
-        if (!text) {
-          throw new Error('Empty response from server');
-        }
-
-        try {
-          result = JSON.parse(text);
-        } catch (parseError) {
-          console.error('JSON parse error:', parseError, 'Response text:', text);
-          throw new Error('Invalid response format from server');
-        }
-
-        if (response.ok) {
+        if (result.success && result.thumbnail_url) {
           setPreviewUrl(result.thumbnail_url);
           setThumbnailData({
             thumbnail_url: result.thumbnail_url,
             inherit_to_children: inheritToChildren,
             uploaded_at: new Date().toISOString()
           });
-          
+
           onThumbnailUploaded(folderPath, result.thumbnail_url);
-          
+
           toast({
             title: "Thumbnail uploaded",
             description: `Custom thumbnail set for ${folderPath === 'Root' ? 'root directory' : folderPath}${inheritToChildren ? ' (will inherit to subfolders)' : ''}`,
@@ -133,38 +119,9 @@ const FolderThumbnailUpload: React.FC<FolderThumbnailUploadProps> = ({
 
   const handleRemoveThumbnail = async () => {
     try {
-      const response = await fetch(`${apiService.baseUrl || window.location.origin}/api/folder-thumbnail`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          folder_path: folderPath,
-          file_type: fileType
-        })
-      });
+      const result = await apiService.deleteFolderThumbnail(folderPath, fileType);
 
-      // Handle response properly
-      let result;
-      const text = await response.text();
-      
-      if (text) {
-        try {
-          result = JSON.parse(text);
-        } catch (parseError) {
-          // If we can't parse JSON but got a successful response, assume success
-          if (response.ok) {
-            result = { success: true };
-          } else {
-            throw new Error('Invalid response format');
-          }
-        }
-      } else if (response.ok) {
-        result = { success: true };
-      }
-
-      if (response.ok) {
+      if (result.success) {
         setPreviewUrl(null);
         setThumbnailData(null);
         setInheritToChildren(false);
@@ -225,8 +182,9 @@ const FolderThumbnailUpload: React.FC<FolderThumbnailUploadProps> = ({
               <div className="relative w-full h-full">
                 <img
                   src={previewUrl}
-                  alt="Folder thumbnail"
+                  alt={`Custom thumbnail for ${folderPath}`}
                   className="w-full h-full object-cover"
+                  loading="lazy"
                 />
                 <Button
                   variant="destructive"

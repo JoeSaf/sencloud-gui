@@ -74,10 +74,11 @@ const FolderView: React.FC = () => {
       try {
         const videoInfo = await apiService.getVideoInfo(item.id);
         if (videoInfo.success && videoInfo.data) {
+          const secs = Number((videoInfo.data as any).duration ?? 0);
           const enhancedItem = {
             ...item,
-            duration: videoInfo.data.duration 
-              ? `${Math.floor(videoInfo.data.duration / 3600)}h ${Math.floor((videoInfo.data.duration % 3600) / 60)}m`
+            duration: secs > 0 
+              ? `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`
               : item.duration,
           };
           setSelectedMedia(enhancedItem);

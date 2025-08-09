@@ -165,10 +165,11 @@ const Gallery: React.FC = () => {
       try {
         const videoInfo = await apiService.getVideoInfo(item.id);
         if (videoInfo.success && videoInfo.data) {
+          const secs = Number((videoInfo.data as any).duration ?? 0);
           const enhancedItem = {
             ...item,
-            duration: videoInfo.data.duration 
-              ? `${Math.floor(videoInfo.data.duration / 3600)}h ${Math.floor((videoInfo.data.duration % 3600) / 60)}m`
+            duration: secs > 0 
+              ? `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`
               : item.duration,
           };
           // Only update if the selected media is still the same item
@@ -226,10 +227,18 @@ const Gallery: React.FC = () => {
   };
 
   const handleThumbnailUploaded = useCallback((folderPath: string, thumbnailUrl: string) => {
-    setFolderThumbnails(prev => ({
-      ...prev,
-      [folderPath]: thumbnailUrl
-    }));
+    setFolderThumbnails(prev => {
+      const updated = {
+        ...prev,
+        [folderPath]: thumbnailUrl
+      };
+      try {
+        localStorage.setItem('folderThumbnails', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to persist folder thumbnails:', e);
+      }
+      return updated;
+    });
   }, []);
 
   const handleRefresh = () => {
@@ -273,8 +282,9 @@ const Gallery: React.FC = () => {
     );
   }
 
-  // Get recent items (last 10)
+  // Get recent video items (last 10)
   const recentItems = allMedia
+    .filter((m) => m.type === 'video')
     .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
     .slice(0, 10);
 
@@ -342,6 +352,7 @@ const Gallery: React.FC = () => {
               </h2>
               <FolderThumbnailUpload
                 folderPath={directory}
+                fileType="video"
                 onThumbnailUploaded={handleThumbnailUploaded}
                 existingThumbnail={folderThumbnails[directory]}
               />
