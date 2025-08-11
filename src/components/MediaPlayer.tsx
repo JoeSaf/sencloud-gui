@@ -207,14 +207,43 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     setCurrentTime(newTime);
   }, [getCurrentMediaElement, duration, currentTime]);
 
-  // Fullscreen functions
+  // Enhanced fullscreen functions for mobile support
   const enterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current) return;
     
     try {
-      await playerContainerRef.current.requestFullscreen();
+      // For mobile devices, try different fullscreen methods
+      const element = playerContainerRef.current;
+      
+      if (element.requestFullscreen) {
+        await element.requestFullscreen();
+      } else if ((element as any).webkitRequestFullscreen) {
+        // Safari iOS
+        await (element as any).webkitRequestFullscreen();
+      } else if ((element as any).mozRequestFullScreen) {
+        // Firefox
+        await (element as any).mozRequestFullScreen();
+      } else if ((element as any).msRequestFullscreen) {
+        // IE/Edge
+        await (element as any).msRequestFullscreen();
+      } else {
+        // Fallback for mobile browsers that don't support fullscreen API
+        // Force fullscreen-like behavior
+        setIsFullscreen(true);
+        
+        // Lock orientation on mobile if available
+        if (screen.orientation && (screen.orientation as any).lock) {
+          try {
+            await (screen.orientation as any).lock('landscape');
+          } catch (e) {
+            console.log('Orientation lock failed:', e);
+          }
+        }
+      }
     } catch (error) {
-      console.log('Fullscreen failed:', error);
+      console.log('Fullscreen failed, using fallback:', error);
+      // Fallback for mobile
+      setIsFullscreen(true);
     }
   }, []);
 
@@ -222,9 +251,28 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     try {
       if (document.exitFullscreen) {
         await document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen();
+      } else if ((document as any).mozCancelFullScreen) {
+        await (document as any).mozCancelFullScreen();
+      } else if ((document as any).msExitFullscreen) {
+        await (document as any).msExitFullscreen();
+      } else {
+        // Fallback
+        setIsFullscreen(false);
+        
+        // Unlock orientation if available
+        if (screen.orientation && (screen.orientation as any).unlock) {
+          try {
+            (screen.orientation as any).unlock();
+          } catch (e) {
+            console.log('Orientation unlock failed:', e);
+          }
+        }
       }
     } catch (error) {
       console.log('Exit fullscreen failed:', error);
+      setIsFullscreen(false);
     }
   }, []);
 
@@ -290,10 +338,17 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, isFullscreen, exitFullscreen, handleClose]);
 
-  // Fixed fullscreen change handler
+  // Enhanced fullscreen change handler with mobile support
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const isInFullscreen = !!document.fullscreenElement;
+      // Check various fullscreen properties for cross-browser compatibility
+      const isInFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      
       console.log('Fullscreen changed:', isInFullscreen);
       setIsFullscreen(isInFullscreen);
       
@@ -314,8 +369,18 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       }
     };
 
+    // Listen to all fullscreen change events for cross-browser support
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
   }, [isPlaying, handleMouseMove]);
 
   // Reset state when modal opens/closes
@@ -534,6 +599,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             preload="metadata"
             playsInline
             controls={false}
+            onDoubleClick={toggleFullscreen}
+            style={{ 
+              WebkitPlaysinline: true, // iOS Safari
+              WebkitTransform: 'translateZ(0)' // Hardware acceleration
+            } as any}
           />
         )}
 
@@ -620,12 +690,12 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
             </div>
           </div>
 
-          {/* Control Buttons */}
+           {/* Control Buttons */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
             <div className="flex items-center gap-2 sm:gap-4">
               <button 
                 onClick={() => skipTime(-10)}
-                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
+                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="Rewind 10s"
               >
                 <Rewind className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -633,7 +703,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
               
               <button 
                 onClick={togglePlayPause}
-                className="p-3 sm:p-4 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
+                className="p-3 sm:p-4 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[50px] min-w-[50px] flex items-center justify-center"
                 title={isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? (
@@ -645,7 +715,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
               
               <button 
                 onClick={() => skipTime(10)}
-                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
+                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="Forward 10s"
               >
                 <FastForward className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -728,13 +798,13 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
               {/* Fullscreen */}
               <button 
                 onClick={toggleFullscreen}
-                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
+                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? (
-                  <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                  <Minimize2 className="w-5 h-5 sm:w-5 sm:h-5 text-white" />
                 ) : (
-                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                  <Maximize2 className="w-5 h-5 sm:w-5 sm:h-5 text-white" />
                 )}
               </button>
             </div>
