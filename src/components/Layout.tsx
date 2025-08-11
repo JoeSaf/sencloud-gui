@@ -191,7 +191,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           ? 'bg-background/95 backdrop-blur-xl border-b shadow-sm' 
           : 'bg-background/80 backdrop-blur-xl'
       }`}>
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6">
+        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-3 flex-shrink-0">
@@ -245,12 +245,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSearchOpen(true)}
-                className="md:hidden"
+                className="md:hidden min-w-[44px] min-h-[44px]"
               >
                 <Search className="w-5 h-5" />
               </Button>
 
-              {/* User Menu */}
+              {/* User Menu - Desktop Only */}
               <div className="hidden sm:flex items-center gap-2">
                 <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-card border">
                   <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
@@ -269,6 +269,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   size="icon"
                   onClick={handleLogout}
                   title="Logout"
+                  className="min-w-[44px] min-h-[44px]"
                 >
                   <LogOut className="w-4 h-4" />
                 </Button>
@@ -279,7 +280,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden"
+                className="lg:hidden min-w-[44px] min-h-[44px]"
               >
                 {isMobileMenuOpen ? (
                   <X className="w-5 h-5" />
@@ -302,10 +303,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           />
           
           {/* Menu Panel */}
-          <div className="fixed right-0 top-0 h-full w-80 max-w-[90vw] bg-background border-l shadow-xl">
+          <div className="fixed right-0 top-0 h-full w-80 max-w-[85vw] bg-background border-l shadow-xl overflow-y-auto">
             <div className="flex flex-col h-full">
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center">
                     <Cloud className="w-4 h-4 text-primary-foreground" />
@@ -319,13 +320,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsMobileMenuOpen(false)}
+                  className="min-w-[44px] min-h-[44px]"
                 >
                   <X className="w-5 h-5" />
                 </Button>
               </div>
 
               {/* User Info */}
-              <div className="p-6 border-b">
+              <div className="p-4 sm:p-6 border-b">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                     <User className="w-5 h-5 text-primary-foreground" />
@@ -340,7 +342,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </div>
 
               {/* Navigation */}
-              <div className="flex-1 p-6">
+              <div className="flex-1 p-4 sm:p-6">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                     Navigation
@@ -351,7 +353,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                       to={item.to}
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={({ isActive }) => 
-                        `flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                        `flex items-center gap-3 p-3 rounded-xl transition-all duration-200 min-h-[48px] ${
                           isActive 
                             ? 'bg-primary text-primary-foreground shadow-lg' 
                             : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -375,11 +377,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t">
+              <div className="p-4 sm:p-6 border-t">
                 <Button
                   variant="destructive"
                   onClick={handleLogout}
-                  className="w-full"
+                  className="w-full min-h-[48px]"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
@@ -407,7 +409,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       )}
 
       {/* Main Content */}
-      <main className={`pt-16 ${!isOnline ? 'pt-26' : ''}`}>
+      <main className={`pt-16 pb-safe ${!isOnline ? 'pt-26' : ''}`}>
         {children}
       </main>
 

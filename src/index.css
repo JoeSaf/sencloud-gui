@@ -306,6 +306,7 @@
   .mobile-touch-target {
     min-height: 44px;
     min-width: 44px;
+    touch-action: manipulation;
   }
 
   /* Safe area support for devices with notches/home indicators */
@@ -319,6 +320,29 @@
 
   .h-safe-area-inset-bottom {
     height: env(safe-area-inset-bottom, 0);
+  }
+
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* Responsive container patterns */
+  .container-responsive {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Responsive text sizing */
+  .text-responsive {
+    @apply text-sm sm:text-base lg:text-lg;
+  }
+
+  /* Responsive spacing */
+  .spacing-responsive {
+    @apply p-3 sm:p-4 lg:p-6;
+  }
+
+  .gap-responsive {
+    @apply gap-2 sm:gap-3 lg:gap-4;
   }
 
   /* Enhanced gallery components */
