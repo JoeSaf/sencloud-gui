@@ -1,4 +1,4 @@
-// src/pages/Upload.tsx
+// src/pages/Upload.tsx - Fixed and Complete Version
 import React, { useState, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -66,39 +66,30 @@ const Upload: React.FC = () => {
   const getFileCategory = (file: File): 'image' | 'video' | 'audio' | 'document' | 'code' | 'archive' => {
     const type = file.type.toLowerCase();
     const extension = file.name.split('.').pop()?.toLowerCase() || '';
-
-    if (type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'svg'].includes(extension)) {
-      return 'image';
-    }
-    if (type.startsWith('video/') || ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpg', 'mpeg', '3gp', 'ogv'].includes(extension)) {
-      return 'video';
-    }
-    if (type.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus'].includes(extension)) {
-      return 'audio';
-    }
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'md', 'csv', 'odt', 'ods', 'odp'].includes(extension)) {
-      return 'document';
-    }
-    if (['py', 'js', 'ts', 'html', 'css', 'json', 'xml', 'yaml', 'yml', 'sh', 'php', 'java', 'cpp', 'h', 'sql'].includes(extension)) {
-      return 'code';
-    }
-    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tbz2', 'txz'].includes(extension)) {
-      return 'archive';
-    }
-    return 'document'; // Default fallback
+    
+    if (type.startsWith('image/')) return 'image';
+    if (type.startsWith('video/')) return 'video';
+    if (type.startsWith('audio/')) return 'audio';
+    
+    // Check by extension
+    const videoExts = ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v'];
+    const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'];
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+    const docExts = ['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt'];
+    const codeExts = ['js', 'ts', 'jsx', 'tsx', 'py', 'html', 'css', 'json', 'xml'];
+    const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2'];
+    
+    if (videoExts.includes(extension)) return 'video';
+    if (audioExts.includes(extension)) return 'audio';
+    if (imageExts.includes(extension)) return 'image';
+    if (docExts.includes(extension)) return 'document';
+    if (codeExts.includes(extension)) return 'code';
+    if (archiveExts.includes(extension)) return 'archive';
+    
+    return 'document';
   };
 
-  const getFileIcon = (category: string) => {
-    switch (category) {
-      case 'video': return <Film className="w-5 h-5" />;
-      case 'image': return <Image className="w-5 h-5" />;
-      case 'audio': return <Music className="w-5 h-5" />;
-      case 'archive': return <Archive className="w-5 h-5" />;
-      default: return <FileText className="w-5 h-5" />;
-    }
-  };
-
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -106,31 +97,41 @@ const Upload: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const getFileIcon = (category: string) => {
+    switch (category) {
+      case 'video': return <Film className="w-4 h-4" />;
+      case 'audio': return <Music className="w-4 h-4" />;
+      case 'image': return <Image className="w-4 h-4" />;
+      case 'archive': return <Archive className="w-4 h-4" />;
+      default: return <FileText className="w-4 h-4" />;
+    }
+  };
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(true);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
     setDragOver(false);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    
     const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
+    processFiles(files);
   }, []);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      handleFiles(files);
-    }
-  };
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+  }, []);
 
-  const handleFiles = (files: File[]) => {
-    const newFiles: UploadedFile[] = files.map((file) => ({
+  const processFiles = (files: File[]) => {
+    const newFiles: UploadedFile[] = files.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
       name: file.name,
@@ -138,24 +139,10 @@ const Upload: React.FC = () => {
       type: file.type,
       category: getFileCategory(file),
       progress: 0,
-      status: 'pending'
+      status: 'pending' as const,
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
-
-    // Auto-select file type if not already selected
-    if (!selectedFileType && newFiles.length > 0) {
-      const mostCommonType = newFiles.reduce((acc, file) => {
-        acc[file.category] = (acc[file.category] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      
-      const dominantType = Object.entries(mostCommonType).reduce((a, b) => 
-        mostCommonType[a[0]] > mostCommonType[b[0]] ? a : b
-      )[0];
-      
-      setSelectedFileType(dominantType);
-    }
   };
 
   const removeFile = (id: string) => {
@@ -166,136 +153,147 @@ const Upload: React.FC = () => {
     setUploadedFiles([]);
   };
 
-  const uploadFile = async (fileData: UploadedFile) => {
+  const retryFailedUploads = () => {
     setUploadedFiles(prev => 
-      prev.map(f => 
-        f.id === fileData.id 
-          ? { ...f, status: 'uploading', progress: 0 }
-          : f
+      prev.map(file => 
+        file.status === 'error' 
+          ? { ...file, status: 'pending' as const, error: undefined, progress: 0 }
+          : file
       )
     );
+  };
 
+  const uploadSingleFile = async (fileData: UploadedFile): Promise<boolean> => {
     try {
-      const response = await apiService.uploadFile(
-        fileData.file,
-        selectedFolder,
-        (progress) => {
-          setUploadedFiles(prev => 
-            prev.map(f => 
-              f.id === fileData.id 
-                ? { ...f, progress: Math.round(progress) }
-                : f
-            )
-          );
-        }
-      );
-
-      if (response.success) {
-        setUploadedFiles(prev => 
-          prev.map(f => 
-            f.id === fileData.id 
-              ? { ...f, status: 'completed', progress: 100 }
-              : f
-          )
-        );
-        
-        toast({
-          title: "Upload Successful",
-          description: `${fileData.name} has been uploaded successfully.`,
-        });
-      } else {
-        throw new Error(response.error || 'Upload failed');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      
       setUploadedFiles(prev => 
-        prev.map(f => 
-          f.id === fileData.id 
-            ? { ...f, status: 'error', error: errorMessage }
-            : f
-        )
+        prev.map(f => f.id === fileData.id ? { ...f, status: 'uploading' as const, progress: 0 } : f)
       );
 
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload ${fileData.name}: ${errorMessage}`,
-        variant: "destructive",
+      const formData = new FormData();
+      formData.append('files', fileData.file);
+      formData.append('file_type', selectedFileType);
+      if (selectedFolder && selectedFolder !== 'root') {
+        formData.append('custom_folder', selectedFolder);
+      }
+
+      const xhr = new XMLHttpRequest();
+      
+      return new Promise((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100);
+            setUploadedFiles(prev => 
+              prev.map(f => f.id === fileData.id ? { ...f, progress } : f)
+            );
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            setUploadedFiles(prev => 
+              prev.map(f => f.id === fileData.id ? { ...f, status: 'completed' as const, progress: 100 } : f)
+            );
+            resolve(true);
+          } else {
+            const errorMessage = `Upload failed: ${xhr.status}`;
+            setUploadedFiles(prev => 
+              prev.map(f => f.id === fileData.id ? { ...f, status: 'error' as const, error: errorMessage } : f)
+            );
+            reject(new Error(errorMessage));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          const errorMessage = 'Network error occurred';
+          setUploadedFiles(prev => 
+            prev.map(f => f.id === fileData.id ? { ...f, status: 'error' as const, error: errorMessage } : f)
+          );
+          reject(new Error(errorMessage));
+        });
+
+        xhr.open('POST', '/upload');
+        xhr.send(formData);
       });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileData.id ? { ...f, status: 'error' as const, error: errorMessage } : f)
+      );
+      return false;
     }
   };
 
   const uploadAllFiles = async () => {
     if (!selectedFileType) {
       toast({
-        title: "File Type Required",
-        description: "Please select a file type before uploading.",
+        title: "Error",
+        description: "Please select a file type before uploading",
         variant: "destructive",
       });
       return;
     }
 
     const pendingFiles = uploadedFiles.filter(f => f.status === 'pending');
-    if (pendingFiles.length === 0) {
+    if (pendingFiles.length === 0) return;
+
+    setIsUploading(true);
+
+    try {
+      for (const file of pendingFiles) {
+        await uploadSingleFile(file);
+        // Add small delay between uploads
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       toast({
-        title: "No Files to Upload",
-        description: "All files have already been processed.",
+        title: "Success",
+        description: `Uploaded ${pendingFiles.length} file(s) successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Some uploads failed. Check the file list for details.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsUploading(true);
-
-    // Upload files sequentially to avoid overwhelming the server
-    for (const file of pendingFiles) {
-      await uploadFile(file);
-    }
-
-    setIsUploading(false);
-  };
-
-  const retryFailedUploads = async () => {
-    const failedFiles = uploadedFiles.filter(f => f.status === 'error');
-    if (failedFiles.length === 0) return;
-
-    setIsUploading(true);
-    
-    for (const file of failedFiles) {
-      await uploadFile(file);
-    }
-
-    setIsUploading(false);
   };
 
   const createFolder = async () => {
     if (!newFolderName.trim() || !selectedFileType) {
       toast({
-        title: "Invalid Input",
-        description: "Please enter a folder name and select a file type.",
+        title: "Error", 
+        description: "Please enter folder name and select file type",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const response = await apiService.createFolder(newFolderName.trim(), selectedFileType);
-      
-      if (response.success) {
+      const formData = new FormData();
+      formData.append('folder_path', newFolderName.trim());
+      formData.append('file_type', selectedFileType);
+
+      const response = await fetch('/create_folder', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
         toast({
-          title: "Folder Created",
-          description: `Folder "${newFolderName}" has been created successfully.`,
+          title: "Success",
+          description: `Folder "${newFolderName}" created successfully`,
         });
-        
         setNewFolderName('');
         setIsCreateFolderOpen(false);
         refetchFolders();
       } else {
-        throw new Error(response.error || 'Failed to create folder');
+        throw new Error('Failed to create folder');
       }
     } catch (error) {
       toast({
-        title: "Creation Failed",
+        title: "Error",
         description: error instanceof Error ? error.message : 'Failed to create folder',
         variant: "destructive",
       });
@@ -376,21 +374,25 @@ const Upload: React.FC = () => {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
+                      <label className="block text-sm font-medium mb-2">
                         Folder Name
                       </label>
                       <Input
                         value={newFolderName}
                         onChange={(e) => setNewFolderName(e.target.value)}
                         placeholder="Enter folder name..."
+                        onKeyDown={(e) => e.key === 'Enter' && createFolder()}
                       />
                     </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setIsCreateFolderOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={createFolder}>
+                    <div className="flex gap-2">
+                      <Button onClick={createFolder} className="flex-1">
                         Create Folder
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setIsCreateFolderOpen(false)}
+                      >
+                        Cancel
                       </Button>
                     </div>
                   </div>
@@ -398,22 +400,17 @@ const Upload: React.FC = () => {
               </Dialog>
             )}
           </div>
-          <Select 
-            value={selectedFolder} 
-            onValueChange={setSelectedFolder}
-            disabled={!selectedFileType}
-          >
+          <Select value={selectedFolder} onValueChange={setSelectedFolder}>
             <SelectTrigger>
-              <SelectValue placeholder={selectedFileType ? "Select folder (optional)..." : "Select file type first"} />
+              <SelectValue placeholder="Select destination folder..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Root Directory</SelectItem>
+              <SelectItem value="root">Root Directory</SelectItem>
               {folders.map((folder) => (
-                <SelectItem key={folder.path} value={folder.path}>
-                  <div className="flex items-center gap-2">
-                    <Folder className="w-3 h-3" />
-                    {folder.display_name}
-                  </div>
+                <SelectItem key={folder.path || folder.name} value={folder.path || folder.name}>
+                  <span style={{ paddingLeft: `${folder.depth * 16}px` }}>
+                    {folder.display_name || folder.name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -421,9 +418,13 @@ const Upload: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload Zone */}
+      {/* Upload Area */}
       <div
-        className={`upload-zone mb-6 cursor-pointer ${dragOver ? 'dragover' : ''}`}
+        className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-colors cursor-pointer mb-6 ${
+          dragOver 
+            ? 'border-primary bg-primary/5' 
+            : 'border-border hover:border-primary/50'
+        }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -438,7 +439,7 @@ const Upload: React.FC = () => {
         />
         
         <div className="text-center">
-          <div className="w-12 sm:w-16 h-12 sm:h-16 primary-gradient rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-12 sm:w-16 h-12 sm:h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
             <UploadIcon className="w-6 sm:w-8 h-6 sm:h-8 text-primary-foreground" />
           </div>
           <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">
@@ -474,7 +475,7 @@ const Upload: React.FC = () => {
 
       {/* File List */}
       {uploadedFiles.length > 0 && (
-        <div className="card-gradient rounded-xl p-4 sm:p-6">
+        <div className="bg-card/50 border border-border rounded-xl p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-base sm:text-lg font-semibold text-foreground">

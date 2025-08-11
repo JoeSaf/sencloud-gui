@@ -14,6 +14,7 @@ import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ErrorPage from "./pages/ErrorPage";
+import PlayerPage from "./pages/PlayerPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,7 +93,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            
+              {/* New dedicated player route - NO Layout wrapper for fullscreen */}
+              <Route 
+              path="/player" 
+              element={
+              <ProtectedRoute>
+                <PlayerPage />
+              </ProtectedRoute>} />
+              
             {/* Catch-all route */}
             <Route path="*" element={<ErrorPage />} />
           </Routes>

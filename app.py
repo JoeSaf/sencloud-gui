@@ -20,6 +20,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from PIL import Image, ImageOps
 from flask_cors import CORS
 import requests
+from typing import List, Dict, Any, Optional, Tuple
+
 
 import secrets
 import time
@@ -632,6 +634,322 @@ def count_nested_folders(base_path):
     
     return count
 
+def natural_sort_key(text: str) -> List:
+    """
+    Generate a key for natural sorting that handles numbers properly
+    """
+    def convert(text_part):
+        if text_part.isdigit():
+            return int(text_part)
+        return text_part.lower()
+    
+    return [convert(c) for c in re.split('([0-9]+)', text)]
+
+def extract_episode_info(filename: str) -> Dict[str, Any]:
+    """
+    Extract season, episode, and series information from filename
+    """
+    # Remove file extension
+    clean_name = re.sub(r'\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v)$', '', filename, flags=re.IGNORECASE)
+    
+    episode_info = {
+        'original_filename': filename,
+        'clean_title': clean_name,
+        'season': None,
+        'episode': None,
+        'series_name': None
+    }
+    
+    # Common episode patterns
+    patterns = [
+        (r'(.+?)\s+[Ss](\d+)[Ee](\d+)', 'series_season_episode'),     # Series S01E01
+        (r'(.+?)\s+[Ss]eason\s*(\d+).*?[Ee]pisode\s*(\d+)', 'series_season_episode'),  # Series Season 1 Episode 1
+        (r'(.+?)\s+(\d+)x(\d+)', 'series_season_episode'),            # Series 1x01
+        (r'(.+?)\s+[Ee]p\.?\s*(\d+)', 'series_episode'),              # Series Ep01
+        (r'(.+?)\s+[Ee]pisode\s*(\d+)', 'series_episode'),            # Series Episode 01
+        (r'(.+?)\s+[Ee](\d+)', 'series_episode'),                     # Series E01
+        (r'(.+?)\s+(\d+)', 'series_episode'),                         # Series 01
+    ]
+    
+    for pattern, pattern_type in patterns:
+        match = re.search(pattern, clean_name, re.IGNORECASE)
+        if match:
+            if pattern_type == 'series_season_episode':
+                episode_info['series_name'] = match.group(1).strip()
+                episode_info['season'] = int(match.group(2))
+                episode_info['episode'] = int(match.group(3))
+            elif pattern_type == 'series_episode':
+                episode_info['series_name'] = match.group(1).strip()
+                episode_info['episode'] = int(match.group(2))
+            break
+    
+    # If no pattern matched, try to extract series name and episode from the structure
+    if not episode_info['series_name']:
+        # Look for numbers at the end
+        numbers = re.findall(r'\d+', clean_name)
+        if numbers:
+            episode_info['episode'] = int(numbers[-1])
+            # Remove the number to get series name
+            series_match = re.sub(r'\s*\d+\s*$', '', clean_name)
+            if series_match:
+                episode_info['series_name'] = series_match.strip()
+    
+    return episode_info
+
+def group_files_by_series(files: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Group video files by series with proper episode ordering
+    """
+    series_groups = {}
+    
+    for file_data in files:
+        if file_data.get('type') != 'video':
+            continue
+        
+        episode_info = extract_episode_info(file_data['filename'])
+        
+        # Determine series key (prefer folder structure, then extracted series name)
+        series_key = (
+            file_data.get('folder', '').strip() or 
+            episode_info.get('series_name', '').strip() or 
+            'Unknown Series'
+        )
+        
+        # Normalize series key
+        series_key = series_key.replace('/', ' ').strip()
+        if not series_key:
+            series_key = 'Unknown Series'
+        
+        if series_key not in series_groups:
+            series_groups[series_key] = []
+        
+        # Add episode info to file data
+        enhanced_file = {**file_data, **episode_info, 'series_key': series_key}
+        series_groups[series_key].append(enhanced_file)
+    
+    # Sort each series by season and episode
+    for series_key in series_groups:
+        series_groups[series_key].sort(key=lambda x: (
+            x.get('season') or 0,  # Sort by season first
+            x.get('episode') or 0,  # Then by episode
+            natural_sort_key(x['filename'])  # Finally by filename naturally
+        ))
+    
+    return series_groups
+
+def get_enhanced_media_files(base_path: str, folder_path: str = '') -> List[Dict[str, Any]]:
+    """
+    Enhanced version of scan_media_files with episode information
+    """
+    media_files = scan_media_files(base_path, folder_path)
+    
+    # Add episode information to video files
+    for file_data in media_files:
+        if file_data.get('type') == 'video':
+            episode_info = extract_episode_info(file_data['filename'])
+            file_data.update(episode_info)
+    
+    # Sort files naturally
+    media_files.sort(key=lambda x: natural_sort_key(x['filename']))
+    
+    return media_files
+
+def find_next_episode(current_file: Dict[str, Any], all_files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Find the next episode in sequence for a given file
+    """
+    if current_file.get('type') != 'video':
+        return None
+    
+    series_groups = group_files_by_series(all_files)
+    current_series_key = current_file.get('series_key')
+    
+    if not current_series_key or current_series_key not in series_groups:
+        return None
+    
+    series_episodes = series_groups[current_series_key]
+    current_index = -1
+    
+    # Find current episode index
+    for i, episode in enumerate(series_episodes):
+        if episode['filename'] == current_file['filename']:
+            current_index = i
+            break
+    
+    # Return next episode if exists
+    if current_index >= 0 and current_index < len(series_episodes) - 1:
+        return series_episodes[current_index + 1]
+    
+    return None
+
+def find_previous_episode(current_file: Dict[str, Any], all_files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Find the previous episode in sequence for a given file
+    """
+    if current_file.get('type') != 'video':
+        return None
+    
+    series_groups = group_files_by_series(all_files)
+    current_series_key = current_file.get('series_key')
+    
+    if not current_series_key or current_series_key not in series_groups:
+        return None
+    
+    series_episodes = series_groups[current_series_key]
+    current_index = -1
+    
+    # Find current episode index
+    for i, episode in enumerate(series_episodes):
+        if episode['filename'] == current_file['filename']:
+            current_index = i
+            break
+    
+    # Return previous episode if exists
+    if current_index > 0:
+        return series_episodes[current_index - 1]
+    
+    return None
+
+# New API endpoints for episode navigation
+@app.route('/api/episode/next/<path:filename>')
+@login_required
+def api_next_episode(filename):
+    """Get next episode in sequence"""
+    try:
+        # Find the file across all media directories
+        current_file = None
+        all_files = []
+        
+        for file_type in ['video']:  # Only check video files for episodes
+            media_dir = get_media_path(file_type)
+            files = get_enhanced_media_files(media_dir)
+            all_files.extend(files)
+            
+            # Find current file
+            for file_data in files:
+                if file_data['relative_path'] == filename:
+                    current_file = file_data
+                    break
+        
+        if not current_file:
+            return jsonify({'error': 'File not found'}), 404
+        
+        next_episode = find_next_episode(current_file, all_files)
+        
+        if next_episode:
+            return jsonify({
+                'success': True,
+                'next_episode': {
+                    'filename': next_episode['filename'],
+                    'relative_path': next_episode['relative_path'],
+                    'title': next_episode.get('clean_title', next_episode['filename']),
+                    'season': next_episode.get('season'),
+                    'episode': next_episode.get('episode'),
+                    'series_name': next_episode.get('series_name'),
+                    'stream_url': url_for('stream_file', filename=next_episode['relative_path'])
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'No next episode found'})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/episode/previous/<path:filename>')
+@login_required
+def api_previous_episode(filename):
+    """Get previous episode in sequence"""
+    try:
+        # Find the file across all media directories
+        current_file = None
+        all_files = []
+        
+        for file_type in ['video']:
+            media_dir = get_media_path(file_type)
+            files = get_enhanced_media_files(media_dir)
+            all_files.extend(files)
+            
+            # Find current file
+            for file_data in files:
+                if file_data['relative_path'] == filename:
+                    current_file = file_data
+                    break
+        
+        if not current_file:
+            return jsonify({'error': 'File not found'}), 404
+        
+        previous_episode = find_previous_episode(current_file, all_files)
+        
+        if previous_episode:
+            return jsonify({
+                'success': True,
+                'previous_episode': {
+                    'filename': previous_episode['filename'],
+                    'relative_path': previous_episode['relative_path'],
+                    'title': previous_episode.get('clean_title', previous_episode['filename']),
+                    'season': previous_episode.get('season'),
+                    'episode': previous_episode.get('episode'),
+                    'series_name': previous_episode.get('series_name'),
+                    'stream_url': url_for('stream_file', filename=previous_episode['relative_path'])
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'No previous episode found'})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/series/<path:filename>')
+@login_required
+def api_series_episodes(filename):
+    """Get all episodes in the same series"""
+    try:
+        # Find the file and its series
+        current_file = None
+        all_files = []
+        
+        for file_type in ['video']:
+            media_dir = get_media_path(file_type)
+            files = get_enhanced_media_files(media_dir)
+            all_files.extend(files)
+            
+            # Find current file
+            for file_data in files:
+                if file_data['relative_path'] == filename:
+                    current_file = file_data
+                    break
+        
+        if not current_file:
+            return jsonify({'error': 'File not found'}), 404
+        
+        series_groups = group_files_by_series(all_files)
+        current_series_key = current_file.get('series_key')
+        
+        if current_series_key and current_series_key in series_groups:
+            episodes = series_groups[current_series_key]
+            return jsonify({
+                'success': True,
+                'series_name': current_series_key,
+                'episodes': [
+                    {
+                        'filename': ep['filename'],
+                        'relative_path': ep['relative_path'],
+                        'title': ep.get('clean_title', ep['filename']),
+                        'season': ep.get('season'),
+                        'episode': ep.get('episode'),
+                        'is_current': ep['relative_path'] == filename,
+                        'stream_url': url_for('stream_file', filename=ep['relative_path'])
+                    }
+                    for ep in episodes
+                ]
+            })
+        else:
+            return jsonify({'success': False, 'message': 'No series found'})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+    
 # Enhanced streaming with range support
 def stream_file_with_ranges(file_path, video_info=None):
     """Stream file with HTTP range support for better video playback"""

@@ -1,4 +1,4 @@
-// src/components/MediaPlayer.tsx - Complete Fixed Version
+// src/components/MediaPlayer.tsx - Complete Updated Version with Episode Navigation
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   X, 
@@ -20,8 +20,21 @@ import {
   Subtitles,
   RotateCcw,
   FastForward,
-  Rewind
+  Rewind,
+  List,
+  Clock
 } from 'lucide-react';
+
+interface Episode {
+  filename: string;
+  relative_path: string;
+  title: string;
+  season?: number;
+  episode?: number;
+  series_name?: string;
+  stream_url: string;
+  is_current?: boolean;
+}
 
 interface MediaPlayerProps {
   isOpen: boolean;
@@ -64,7 +77,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   isOpen, 
   onClose, 
   media, 
-  nextEpisode, 
+  nextEpisode: propNextEpisode, 
   onNextEpisode,
   recommendedMedia = [],
   onRecommendedSelect 
@@ -72,7 +85,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null); // ✅ Use ref instead of state
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -84,8 +97,32 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
   const [showNextEpisode, setShowNextEpisode] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showEpisodeList, setShowEpisodeList] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [autoplayNext, setAutoplayNext] = useState(true);
+  
+  // Enhanced mobile fullscreen states
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  const [isMobileFullscreen, setIsMobileFullscreen] = useState(false);
+
+  // Episode navigation states
+  const [nextEpisode, setNextEpisode] = useState<Episode | null>(null);
+  const [previousEpisode, setPreviousEpisode] = useState<Episode | null>(null);
+  const [episodeList, setEpisodeList] = useState<Episode[]>([]);
+  const [currentEpisodeIndex, setCurrentEpisodeIndex] = useState(-1);
+  const [episodeLoading, setEpisodeLoading] = useState(false);
+
+  // Determine media type
+  const isVideo = media?.type === 'video';
+  const isAudio = media?.type === 'audio';
+  const isImage = media?.type === 'image';
+
+  // Mobile device detection
+  const isMobileDevice = useCallback(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }, []);
 
   // Get current media element reference
   const getCurrentMediaElement = useCallback(() => {
@@ -97,138 +134,226 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     return null;
   }, [media?.type]);
 
-  // Handle close
-  const handleClose = useCallback(() => {
-    const mediaElement = getCurrentMediaElement();
-    if (mediaElement) {
-      mediaElement.pause();
-      setIsPlaying(false);
-    }
-    // Clear timeout on close
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-      controlsTimeoutRef.current = null;
-    }
-    onClose();
-  }, [getCurrentMediaElement, onClose]);
-
-  // Fixed mouse event handlers
-  const handleMouseMove = useCallback(() => {
-    setShowControls(true);
+  // Episode navigation hook
+  const fetchEpisodeData = useCallback(async () => {
+    if (!media?.url || media.type !== 'video') return;
     
-    // Only start hiding controls if in fullscreen and playing
-    if (isFullscreen && isPlaying) {
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-        controlsTimeoutRef.current = null;
-      }
-      
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    }
-  }, [isFullscreen, isPlaying]);
+    setEpisodeLoading(true);
+    try {
+      const filename = media.url.split('/stream/')[1];
+      if (!filename) return;
 
-  const handleMouseLeave = useCallback(() => {
-    // Only hide controls if in fullscreen, playing, and not interacting
-    if (isFullscreen && isPlaying) {
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-        controlsTimeoutRef.current = null;
-      }
-      
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 1000); // Shorter timeout for mouse leave
-    }
-  }, [isFullscreen, isPlaying]);
+      // Fetch next episode
+      const nextResponse = await fetch(`/api/episode/next/${filename}`);
+      const nextData = await nextResponse.json();
 
-  // Fixed togglePlayPause
-  const togglePlayPause = useCallback(async () => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement) return;
+      // Fetch previous episode
+      const prevResponse = await fetch(`/api/episode/previous/${filename}`);
+      const prevData = await prevResponse.json();
+
+      // Fetch all episodes in series
+      const seriesResponse = await fetch(`/api/series/${filename}`);
+      const seriesData = await seriesResponse.json();
+
+      setNextEpisode(nextData.success ? nextData.next_episode : null);
+      setPreviousEpisode(prevData.success ? prevData.previous_episode : null);
+      
+      if (seriesData.success) {
+        setEpisodeList(seriesData.episodes);
+        setCurrentEpisodeIndex(seriesData.episodes.findIndex((ep: Episode) => ep.is_current));
+      }
+    } catch (error) {
+      console.error('Error fetching episode data:', error);
+    } finally {
+      setEpisodeLoading(false);
+    }
+  }, [media]);
+
+  // Episode navigation functions
+  const playNextEpisode = useCallback(() => {
+    if (nextEpisode && onRecommendedSelect) {
+      const nextMedia = {
+        id: nextEpisode.relative_path,
+        title: nextEpisode.title,
+        url: nextEpisode.stream_url,
+        type: 'video',
+        image: media?.image || '/placeholder.svg',
+        year: media?.year,
+        genre: media?.genre
+      };
+      onRecommendedSelect(nextMedia);
+      setShowNextEpisode(false);
+    }
+  }, [nextEpisode, onRecommendedSelect, media]);
+
+  const playPreviousEpisode = useCallback(() => {
+    if (previousEpisode && onRecommendedSelect) {
+      const prevMedia = {
+        id: previousEpisode.relative_path,
+        title: previousEpisode.title,
+        url: previousEpisode.stream_url,
+        type: 'video',
+        image: media?.image || '/placeholder.svg',
+        year: media?.year,
+        genre: media?.genre
+      };
+      onRecommendedSelect(prevMedia);
+    }
+  }, [previousEpisode, onRecommendedSelect, media]);
+
+  const playEpisodeFromList = useCallback((episode: Episode) => {
+    if (onRecommendedSelect) {
+      const episodeMedia = {
+        id: episode.relative_path,
+        title: episode.title,
+        url: episode.stream_url,
+        type: 'video',
+        image: media?.image || '/placeholder.svg',
+        year: media?.year,
+        genre: media?.genre
+      };
+      onRecommendedSelect(episodeMedia);
+      setShowEpisodeList(false);
+    }
+  }, [onRecommendedSelect, media]);
+
+  // Enhanced mobile fullscreen functions
+  const enterMobileFullscreen = useCallback(async () => {
+    if (!playerContainerRef.current) return;
+    
+    const container = playerContainerRef.current;
     
     try {
-      // Temporarily disable control hiding to prevent interference
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-        controlsTimeoutRef.current = null;
+      console.log('Entering mobile fullscreen mode');
+      
+      // Lock screen orientation to landscape
+      if (screen.orientation && (screen.orientation as any).lock) {
+        try {
+          await (screen.orientation as any).lock('landscape');
+          console.log('Screen orientation locked to landscape');
+        } catch (e) {
+          console.log('Orientation lock not supported or failed:', e);
+        }
       }
       
-      if (mediaElement.paused) {
-        console.log('Attempting to play media...');
-        const playPromise = mediaElement.play();
-        if (playPromise !== undefined) {
-          await playPromise;
+      setIsMobileFullscreen(true);
+      
+      // Apply fullscreen styles
+      container.style.position = 'fixed';
+      container.style.top = '0';
+      container.style.left = '0';
+      container.style.right = '0';
+      container.style.bottom = '0';
+      container.style.width = '100vw';
+      container.style.height = '100vh';
+      container.style.zIndex = '9999';
+      container.style.background = '#000';
+      
+      // Try native fullscreen first
+      if ('requestFullscreen' in container) {
+        try {
+          await container.requestFullscreen();
+          setIsNativeFullscreen(true);
+          console.log('Native fullscreen activated');
+        } catch (e) {
+          console.log('Native fullscreen failed, using fallback:', e);
         }
       } else {
-        console.log('Pausing media...');
-        mediaElement.pause();
+        // iOS Safari fallback - try video element fullscreen
+        const videoElement = container.querySelector('video');
+        if (videoElement && 'webkitRequestFullscreen' in videoElement) {
+          try {
+            await (videoElement as any).webkitRequestFullscreen();
+            setIsNativeFullscreen(true);
+            console.log('iOS video fullscreen activated');
+          } catch (e) {
+            console.log('iOS fullscreen failed:', e);
+          }
+        }
       }
       
-      // Re-enable control hiding logic after a brief delay
+      // Prevent body scrolling
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      
+      // Hide browser UI on mobile by scrolling
       setTimeout(() => {
-        if (isPlaying && isFullscreen) {
-          handleMouseMove(); // Use existing mouse move logic
-        }
+        window.scrollTo(0, 1);
       }, 100);
       
     } catch (error) {
-      console.log('Play/Pause failed:', error);
+      console.error('Mobile fullscreen setup failed:', error);
     }
-  }, [getCurrentMediaElement, isPlaying, isFullscreen, handleMouseMove]);
+  }, []);
 
-  const toggleMute = useCallback(() => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement) return;
+  const exitMobileFullscreen = useCallback(async () => {
+    if (!playerContainerRef.current) return;
     
-    const newMuted = !isMuted;
-    mediaElement.muted = newMuted;
-    setIsMuted(newMuted);
-  }, [isMuted, getCurrentMediaElement]);
-
-  const adjustVolume = useCallback((delta: number) => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement) return;
+    const container = playerContainerRef.current;
     
-    const newVolume = Math.max(0, Math.min(100, volume + delta));
-    setVolume(newVolume);
-    mediaElement.volume = newVolume / 100;
-    setIsMuted(false);
-    mediaElement.muted = false;
-  }, [volume, getCurrentMediaElement]);
+    try {
+      console.log('Exiting mobile fullscreen mode');
+      
+      // Unlock orientation
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+          console.log('Screen orientation unlocked');
+        } catch (e) {
+          console.log('Orientation unlock failed:', e);
+        }
+      }
+      
+      setIsMobileFullscreen(false);
+      
+      // Remove fullscreen styles
+      container.style.position = '';
+      container.style.top = '';
+      container.style.left = '';
+      container.style.right = '';
+      container.style.bottom = '';
+      container.style.width = '';
+      container.style.height = '';
+      container.style.zIndex = '';
+      container.style.background = '';
+      
+      // Exit native fullscreen
+      if (isNativeFullscreen) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+        setIsNativeFullscreen(false);
+        console.log('Native fullscreen exited');
+      }
+      
+      // Restore body scrolling
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      
+    } catch (error) {
+      console.error('Exit mobile fullscreen failed:', error);
+    }
+  }, [isNativeFullscreen]);
 
-  const skipTime = useCallback((seconds: number) => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement || duration === 0) return;
-    
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    mediaElement.currentTime = newTime;
-    setCurrentTime(newTime);
-  }, [getCurrentMediaElement, duration, currentTime]);
-
-  // Enhanced fullscreen functions for mobile support
+  // Standard fullscreen functions for desktop
   const enterFullscreen = useCallback(async () => {
     if (!playerContainerRef.current) return;
     
     try {
-      // For mobile devices, try different fullscreen methods
       const element = playerContainerRef.current;
       
       if (element.requestFullscreen) {
         await element.requestFullscreen();
       } else if ((element as any).webkitRequestFullscreen) {
-        // Safari iOS
         await (element as any).webkitRequestFullscreen();
       } else if ((element as any).mozRequestFullScreen) {
-        // Firefox
         await (element as any).mozRequestFullScreen();
       } else if ((element as any).msRequestFullscreen) {
-        // IE/Edge
         await (element as any).msRequestFullscreen();
       } else {
-        // Fallback for mobile browsers that don't support fullscreen API
-        // Force fullscreen-like behavior
+        // Fallback for browsers that don't support fullscreen API
         setIsFullscreen(true);
         
         // Lock orientation on mobile if available
@@ -276,114 +401,141 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, []);
 
+  // Unified fullscreen toggle
   const toggleFullscreen = useCallback(() => {
-    if (isFullscreen) {
-      exitFullscreen();
-    } else {
-      enterFullscreen();
-    }
-  }, [isFullscreen, enterFullscreen, exitFullscreen]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      switch (event.code) {
-        case 'Space':
-          event.preventDefault();
-          togglePlayPause();
-          break;
-        case 'KeyF':
-          event.preventDefault();
-          toggleFullscreen();
-          break;
-        case 'KeyM':
-          event.preventDefault();
-          toggleMute();
-          break;
-        case 'ArrowLeft':
-          event.preventDefault();
-          skipTime(-10);
-          break;
-        case 'ArrowRight':
-          event.preventDefault();
-          skipTime(10);
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          adjustVolume(5);
-          break;
-        case 'ArrowDown':
-          event.preventDefault();
-          adjustVolume(-5);
-          break;
-        case 'Escape':
-          event.preventDefault();
-          if (isFullscreen) {
-            exitFullscreen();
-          } else {
-            handleClose();
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, isFullscreen, exitFullscreen, handleClose]);
-
-  // Enhanced fullscreen change handler with mobile support
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      // Check various fullscreen properties for cross-browser compatibility
-      const isInFullscreen = !!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
-      );
-      
-      console.log('Fullscreen changed:', isInFullscreen);
-      setIsFullscreen(isInFullscreen);
-      
-      // Always show controls when not in fullscreen
-      if (!isInFullscreen) {
-        setShowControls(true);
-        if (controlsTimeoutRef.current) {
-          clearTimeout(controlsTimeoutRef.current);
-          controlsTimeoutRef.current = null;
-        }
-      } else {
-        // In fullscreen, show controls initially then manage visibility
-        setShowControls(true);
-        // Only start hiding timer if media is playing
-        if (isPlaying) {
-          setTimeout(() => handleMouseMove(), 500); // Small delay to prevent conflicts
-        }
-      }
-    };
-
-    // Listen to all fullscreen change events for cross-browser support
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    const isCurrentlyFullscreen = isFullscreen || isMobileFullscreen;
     
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-    };
-  }, [isPlaying, handleMouseMove]);
+    if (isCurrentlyFullscreen) {
+      if (isMobileDevice()) {
+        exitMobileFullscreen();
+      } else {
+        exitFullscreen();
+      }
+    } else {
+      if (isMobileDevice()) {
+        enterMobileFullscreen();
+      } else {
+        enterFullscreen();
+      }
+    }
+    
+    setIsFullscreen(!isCurrentlyFullscreen);
+  }, [isFullscreen, isMobileFullscreen, isMobileDevice, enterMobileFullscreen, exitMobileFullscreen, enterFullscreen, exitFullscreen]);
 
-  // Reset state when modal opens/closes
+  // Handle close
+  const handleClose = useCallback(() => {
+    const mediaElement = getCurrentMediaElement();
+    if (mediaElement) {
+      mediaElement.pause();
+      setIsPlaying(false);
+    }
+    // Clear timeout on close
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
+    
+    // Exit fullscreen if active
+    if (isFullscreen || isMobileFullscreen) {
+      if (isMobileDevice()) {
+        exitMobileFullscreen();
+      } else {
+        exitFullscreen();
+      }
+      setIsFullscreen(false);
+    }
+    
+    onClose();
+  }, [getCurrentMediaElement, isFullscreen, isMobileFullscreen, isMobileDevice, exitMobileFullscreen, exitFullscreen, onClose]);
+
+  // Format time for display
+  const formatTime = useCallback((seconds: number): string => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Handle mouse movement for auto-hide controls
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
+    
+    // Only auto-hide if in fullscreen and playing
+    if ((isFullscreen || isMobileFullscreen) && isPlaying && !isImage) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
+  }, [isFullscreen, isMobileFullscreen, isPlaying, isImage]);
+
+  // Play/Pause toggle
+  const togglePlayPause = useCallback(async () => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
+    try {
+      if (isPlaying) {
+        await mediaElement.pause();
+      } else {
+        await mediaElement.play();
+      }
+      
+      // Show controls briefly after play/pause
+      setShowControls(true);
+      if ((isFullscreen || isMobileFullscreen) && !isPlaying) {
+        handleMouseMove(); // Use existing mouse move logic
+      }
+      
+    } catch (error) {
+      console.log('Play/Pause failed:', error);
+    }
+  }, [getCurrentMediaElement, isPlaying, isFullscreen, isMobileFullscreen, handleMouseMove]);
+
+  const toggleMute = useCallback(() => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
+    const newMuted = !isMuted;
+    mediaElement.muted = newMuted;
+    setIsMuted(newMuted);
+  }, [isMuted, getCurrentMediaElement]);
+
+  const adjustVolume = useCallback((delta: number) => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement) return;
+    
+    const newVolume = Math.max(0, Math.min(100, volume + delta));
+    setVolume(newVolume);
+    mediaElement.volume = newVolume / 100;
+    setIsMuted(false);
+    mediaElement.muted = false;
+  }, [volume, getCurrentMediaElement]);
+
+  const skipTime = useCallback((seconds: number) => {
+    const mediaElement = getCurrentMediaElement();
+    if (!mediaElement || duration === 0) return;
+    
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    mediaElement.currentTime = newTime;
+    setCurrentTime(newTime);
+  }, [getCurrentMediaElement, duration, currentTime]);
+
+  // Fetch episode data when media changes
+  useEffect(() => {
+    fetchEpisodeData();
+  }, [fetchEpisodeData]);
+
+  // Initialize media when opened
   useEffect(() => {
     if (isOpen && media) {
       setIsPlaying(false);
@@ -393,6 +545,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
       setShowNextEpisode(false);
       setShowRecommendations(false);
       setShowSettings(false);
+      setShowEpisodeList(false);
       
       // Clear any existing timeouts
       if (controlsTimeoutRef.current) {
@@ -421,6 +574,79 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
     }
   }, [isOpen, media, getCurrentMediaElement]);
 
+  // Enhanced fullscreen change handler with mobile support
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      // Check various fullscreen properties for cross-browser compatibility
+      const isInFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      
+      console.log('Fullscreen changed:', isInFullscreen);
+      setIsNativeFullscreen(isInFullscreen);
+      
+      // Update main fullscreen state
+      const isInAnyFullscreen = isInFullscreen || isMobileFullscreen;
+      setIsFullscreen(isInAnyFullscreen);
+      
+      // Always show controls when not in fullscreen
+      if (!isInAnyFullscreen) {
+        setShowControls(true);
+        if (controlsTimeoutRef.current) {
+          clearTimeout(controlsTimeoutRef.current);
+          controlsTimeoutRef.current = null;
+        }
+      } else {
+        // In fullscreen, show controls initially then manage visibility
+        setShowControls(true);
+        // Only start hiding timer if media is playing
+        if (isPlaying) {
+          setTimeout(() => handleMouseMove(), 500); // Small delay to prevent conflicts
+        }
+      }
+    };
+
+    // Listen to all fullscreen change events for cross-browser support
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, [isMobileFullscreen, isPlaying, handleMouseMove]);
+
+  // Handle orientation change on mobile
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      if (isMobileDevice() && (isFullscreen || isMobileFullscreen)) {
+        // Slight delay to allow orientation change to complete
+        setTimeout(() => {
+          const container = playerContainerRef.current;
+          if (container && isMobileFullscreen) {
+            container.style.width = '100vw';
+            container.style.height = '100vh';
+          }
+        }, 100);
+      }
+    };
+
+    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('resize', handleOrientationChange);
+    
+    return () => {
+      window.removeEventListener('orientationchange', handleOrientationChange);
+      window.removeEventListener('resize', handleOrientationChange);
+    };
+  }, [isFullscreen, isMobileFullscreen, isMobileDevice]);
+
   // Fixed media event handlers
   useEffect(() => {
     const mediaElement = getCurrentMediaElement();
@@ -444,8 +670,15 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         controlsTimeoutRef.current = null;
       }
       
-      if (nextEpisode) {
+      // Auto-play next episode if available
+      if (autoplayNext && nextEpisode) {
         setShowNextEpisode(true);
+        // Auto-play after 5 seconds
+        setTimeout(() => {
+          if (nextEpisode) {
+            playNextEpisode();
+          }
+        }, 5000);
       } else if (recommendedMedia.length > 0) {
         setShowRecommendations(true);
       }
@@ -505,404 +738,638 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({
         mediaElement.removeEventListener('error', handleError);
       }
     };
-  }, [getCurrentMediaElement, isOpen, nextEpisode, recommendedMedia.length]);
+  }, [getCurrentMediaElement, isOpen, autoplayNext, nextEpisode, playNextEpisode, recommendedMedia.length]);
 
   // Set volume and playback rate
   useEffect(() => {
     const mediaElement = getCurrentMediaElement();
     if (mediaElement) {
       mediaElement.volume = isMuted ? 0 : volume / 100;
-      mediaElement.muted = isMuted;
       mediaElement.playbackRate = playbackRate;
     }
-  }, [volume, isMuted, playbackRate, getCurrentMediaElement]);
+  }, [getCurrentMediaElement, volume, isMuted, playbackRate]);
 
-  // Event handlers
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement || duration === 0) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newTime = (clickX / rect.width) * duration;
-    mediaElement.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
+  // Enhanced keyboard shortcuts
+  useEffect(() => {
+    if (!isOpen) return;
 
-  const handleVolumeChange = (e: React.MouseEvent<HTMLDivElement>) => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newVolume = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
-    setVolume(newVolume);
-    mediaElement.volume = newVolume / 100;
-    setIsMuted(false);
-    mediaElement.muted = false;
-  };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
 
-  const changePlaybackRate = (rate: number) => {
-    const mediaElement = getCurrentMediaElement();
-    if (!mediaElement) return;
-    
-    const clampedRate = Math.max(0.25, Math.min(2, rate));
-    setPlaybackRate(clampedRate);
-    mediaElement.playbackRate = clampedRate;
-  };
+      switch (event.code) {
+        case 'Space':
+          event.preventDefault();
+          togglePlayPause();
+          break;
+        case 'KeyF':
+          event.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'KeyM':
+          event.preventDefault();
+          toggleMute();
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          if (event.shiftKey && previousEpisode) {
+            playPreviousEpisode();
+          } else {
+            skipTime(-10);
+          }
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          if (event.shiftKey && nextEpisode) {
+            playNextEpisode();
+          } else {
+            skipTime(10);
+          }
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          adjustVolume(5);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          adjustVolume(-5);
+          break;
+        case 'KeyN':
+          event.preventDefault();
+          if (nextEpisode) {
+            playNextEpisode();
+          }
+          break;
+        case 'KeyP':
+          event.preventDefault();
+          if (previousEpisode) {
+            playPreviousEpisode();
+          }
+          break;
+        case 'KeyL':
+          event.preventDefault();
+          setShowEpisodeList(!showEpisodeList);
+          break;
+        case 'Escape':
+          event.preventDefault();
+          if (isFullscreen || isMobileFullscreen) {
+            toggleFullscreen();
+          } else {
+            handleClose();
+          }
+          break;
+      }
+    };
 
-  const formatTime = (time: number) => {
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
-    const seconds = Math.floor(time % 60);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isOpen, togglePlayPause, toggleFullscreen, toggleMute, skipTime, adjustVolume, 
+    isFullscreen, isMobileFullscreen, handleClose, nextEpisode, previousEpisode, 
+    playNextEpisode, playPreviousEpisode, showEpisodeList
+  ]);
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (isMobileFullscreen) {
+        exitMobileFullscreen();
+      }
+      // Restore body scrolling
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      
+      // Clear any timeouts
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [isMobileFullscreen, exitMobileFullscreen]);
+
+  // Player container classes with mobile fullscreen support
+  const getPlayerClasses = () => {
+    const baseClasses = "relative bg-black rounded-lg overflow-hidden";
     
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    if (isMobileFullscreen) {
+      return `${baseClasses} fixed inset-0 z-[9999] !rounded-none`;
     }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    if (isFullscreen) {
+      return `${baseClasses} w-full h-full`;
+    }
+    
+    return `${baseClasses} w-full aspect-video max-h-[80vh]`;
   };
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   if (!isOpen || !media) return null;
 
-  const isVideo = media.type === 'video';
-  const isAudio = media.type === 'audio';
-  const isImage = media.type === 'image';
-
   return (
-    <div 
-      ref={playerContainerRef} 
-      className={`fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden`}
-      style={{ cursor: isFullscreen && !showControls ? 'none' : 'default' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* Close Button - Always Active */}
-      <button
-        onClick={handleClose}
-        className="fixed top-4 right-4 z-[100] p-3 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all duration-300 opacity-100 cursor-pointer"
-        style={{ pointerEvents: 'all' }} // Force pointer events always active
-        title="Close Player"
-      >
-        <X className="w-6 h-6" />
-      </button>
-
-      {/* Media Content */}
-      <div className="relative w-full h-full flex items-center justify-center">
-        {/* Video Player */}
-        {isVideo && (
-          <video
-            ref={videoRef}
-            className="w-full h-full object-contain"
-            poster={media.image !== '/placeholder.svg' ? media.image : undefined}
-            preload="metadata"
-            playsInline
-            controls={false}
-            onDoubleClick={toggleFullscreen}
-            style={{ 
-              WebkitPlaysinline: true, // iOS Safari
-              WebkitTransform: 'translateZ(0)' // Hardware acceleration
-            } as any}
-          />
-        )}
-
-        {/* Audio Player with Visualization */}
-        {isAudio && (
-          <div className="w-full h-full flex items-center justify-center relative">
-            <audio 
-              ref={audioRef} 
-              preload="metadata" 
-              controls={false}
-            />
-            <div 
-              className="w-full h-full bg-cover bg-center relative"
-              style={{ 
-                backgroundImage: media.image !== '/placeholder.svg' 
-                  ? `url(${media.image})` 
-                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-              }}
-            >
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mb-6 mx-auto backdrop-blur-sm">
-                    {isPlaying ? (
-                      <Pause className="w-16 h-16 text-white" />
-                    ) : (
-                      <Play className="w-16 h-16 text-white ml-2" />
-                    )}
-                  </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
-                  <p className="text-white/70">
-                    {media.year && `${media.year} • `}
-                    {media.duration || 'Audio'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Image Viewer */}
-        {isImage && (
-          <img 
-            src={media.image} 
-            alt={media.title}
-            className="max-w-full max-h-full object-contain"
-          />
-        )}
-      </div>
-
-      {/* Loading/Buffering Indicator */}
-      {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/50 backdrop-blur-sm rounded-lg p-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent"></div>
-          </div>
-        </div>
-      )}
-
-      {/* Controls Overlay */}
-      {!isImage && (
+    <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-0 sm:p-4">
+      <div className="w-full h-full max-w-7xl mx-auto relative">
         <div 
-          className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 ${
-            showControls ? 
-              'opacity-100 translate-y-0' : 
-              'opacity-0 translate-y-full pointer-events-none'
-          }`}
+          ref={playerContainerRef}
+          className={getPlayerClasses()}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setShowControls(true)}
         >
-          {/* Progress Bar */}
-          <div className="px-4 sm:px-6 pt-6 sm:pt-8 pb-3 sm:pb-4">
-            <div 
-              className="w-full h-2 bg-white/20 rounded-full cursor-pointer group"
-              onClick={handleSeek}
-            >
-              <div 
-                className="h-full bg-red-600 rounded-full transition-all relative group-hover:bg-red-500"
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-            </div>
-            <div className="flex justify-between text-sm text-white/70 mt-2">
-              <span>{formatTime(currentTime)}</span>
-              <span>{duration ? formatTime(duration) : media.duration || '0:00'}</span>
-            </div>
-          </div>
+          {/* Video Player */}
+          {isVideo && (
+            <video 
+              ref={videoRef} 
+              className="w-full h-full object-contain"
+              poster={media.image !== '/placeholder.svg' ? media.image : undefined}
+              preload="metadata"
+              playsInline
+              controls={false}
+              onDoubleClick={toggleFullscreen}
+              style={{ 
+                WebkitPlaysinline: true, // iOS Safari
+                WebkitTransform: 'translateZ(0)' // Hardware acceleration
+              } as any}
+            />
+          )}
 
-           {/* Control Buttons */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <button 
-                onClick={() => skipTime(-10)}
-                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
-                title="Rewind 10s"
-              >
-                <Rewind className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </button>
-              
-              <button 
-                onClick={togglePlayPause}
-                className="p-3 sm:p-4 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[50px] min-w-[50px] flex items-center justify-center"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? (
-                  <Pause className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                ) : (
-                  <Play className="w-6 h-6 sm:w-8 sm:h-8 text-white ml-0.5 sm:ml-1" />
-                )}
-              </button>
-              
-              <button 
-                onClick={() => skipTime(10)}
-                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
-                title="Forward 10s"
-              >
-                <FastForward className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </button>
-
-              {nextEpisode && (
-                <button
-                  onClick={onNextEpisode}
-                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors touch-manipulation"
-                  title="Next Episode"
-                >
-                  <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                  <span className="text-white text-xs sm:text-sm hidden sm:inline">Next</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-4">
-              {/* Volume Control */}
-              <div className="flex items-center gap-1 sm:gap-2">
-                <button 
-                  onClick={toggleMute}
-                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
-                  title={isMuted ? "Unmute" : "Mute"}
-                >
-                  {isMuted || volume === 0 ? (
-                    <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                  ) : (
-                    <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                  )}
-                </button>
-                <div 
-                  className="w-16 sm:w-24 h-1 bg-white/30 rounded-full cursor-pointer group touch-manipulation hidden sm:block"
-                  onClick={handleVolumeChange}
-                >
-                  <div 
-                    className="h-full bg-white rounded-full group-hover:bg-white/80 transition-colors"
-                    style={{ width: `${isMuted ? 0 : volume}%` }}
-                  ></div>
-                </div>
-                <span className="text-white/70 text-xs sm:text-sm w-6 sm:w-8 text-right hidden sm:inline">
-                  {Math.round(isMuted ? 0 : volume)}
-                </span>
-              </div>
-
-              {/* Settings */}
-              <div className="relative hidden sm:block">
-                <button 
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation"
-                  title="Settings"
-                >
-                  <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </button>
-                
-                {showSettings && (
-                  <div className="absolute bottom-12 right-0 bg-black/90 backdrop-blur-sm rounded-lg p-4 w-48">
-                    <div className="mb-3">
-                      <label className="text-white/70 text-sm">Speed</label>
-                      <div className="flex gap-1 mt-1">
-                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                          <button
-                            key={rate}
-                            onClick={() => changePlaybackRate(rate)}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${
-                              playbackRate === rate 
-                                ? 'bg-red-600 text-white' 
-                                : 'text-white/70 hover:text-white hover:bg-white/10'
-                            }`}
-                          >
-                            {rate}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Fullscreen */}
-              <button 
-                onClick={toggleFullscreen}
-                className="p-2 sm:p-2 hover:bg-white/20 rounded-full transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
-                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="w-5 h-5 sm:w-5 sm:h-5 text-white" />
-                ) : (
-                  <Maximize2 className="w-5 h-5 sm:w-5 sm:h-5 text-white" />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Next Episode Overlay */}
-      {showNextEpisode && nextEpisode && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-60">
-          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 max-w-md w-full text-center">
-            <h3 className="text-2xl font-bold text-white mb-4">Up Next</h3>
-            <div className="mb-6">
-              <img 
-                src={nextEpisode.image} 
-                alt={nextEpisode.title}
-                className="w-full h-32 object-cover rounded-lg mb-3"
+          {/* Audio Player with Visualization */}
+          {isAudio && (
+            <div className="w-full h-full flex items-center justify-center relative">
+              <audio 
+                ref={audioRef} 
+                preload="metadata" 
+                controls={false}
               />
-              <h4 className="text-lg font-semibold text-white mb-2">{nextEpisode.title}</h4>
-              <div className="flex items-center justify-center gap-2 text-white/60 text-sm">
-                {nextEpisode.year && <span>{nextEpisode.year}</span>}
-                {nextEpisode.duration && <span>{nextEpisode.duration}</span>}
+              <div 
+                className="w-full h-full bg-cover bg-center relative"
+                style={{ 
+                  backgroundImage: media.image !== '/placeholder.svg' 
+                    ? `url(${media.image})` 
+                    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                }}
+              >
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mb-6 mx-auto backdrop-blur-sm">
+                      {isPlaying ? (
+                        <Pause className="w-16 h-16 text-white" />
+                      ) : (
+                        <Play className="w-16 h-16 text-white ml-2" />
+                      )}
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
+                    <p className="text-white/70">
+                      {media.year && `${media.year} • `}
+                      {media.duration || 'Audio'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowNextEpisode(false)}
-                className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowNextEpisode(false);
-                  onNextEpisode?.();
-                }}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                Play Next
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Recommendations Overlay */}
-      {showRecommendations && recommendedMedia.length > 0 && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-60">
-          <div className="bg-black/90 backdrop-blur-sm rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-white">You might also like</h3>
-              <button
-                onClick={() => setShowRecommendations(false)}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6 text-white" />
-              </button>
+          {/* Image Viewer */}
+          {isImage && (
+            <img 
+              src={media.image} 
+              alt={media.title}
+              className="max-w-full max-h-full object-contain"
+            />
+          )}
+
+          {/* Loading/Buffering Indicator */}
+          {isBuffering && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/50 backdrop-blur-sm rounded-lg p-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent"></div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {recommendedMedia.map((item, index) => (
+          )}
+
+          {/* Top Controls Bar - Enhanced with Episode Info */}
+          {(isFullscreen || isMobileFullscreen) && (
+            <div 
+              className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent transition-all duration-300 ${
+                showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
+              }`}
+              style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+            >
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleClose}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                  <div className="text-white">
+                    <h3 className="font-semibold">{media.title}</h3>
+                    {episodeList.length > 1 && (
+                      <p className="text-sm text-white/70">
+                        Episode {currentEpisodeIndex + 1} of {episodeList.length}
+                        {nextEpisode && ` • Next: ${nextEpisode.title}`}
+                      </p>
+                    )}
+                    {media.year && <p className="text-sm text-white/70">{media.year}</p>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {episodeList.length > 1 && (
+                    <button
+                      onClick={() => setShowEpisodeList(!showEpisodeList)}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                      title="Episode List (L)"
+                    >
+                      <List className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+                  {media.url && (
+                    <a
+                      href={media.url}
+                      download
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                      title="Download"
+                    >
+                      <Download className="w-5 h-5 text-white" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Controls Overlay */}
+          {!isImage && (
+            <div 
+              className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-all duration-300 ${
+                showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+              }`}
+              style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+            >
+              {/* Progress Bar */}
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 text-sm text-white mb-2">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>/</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
                 <div 
-                  key={index}
-                  className="group cursor-pointer"
-                  onClick={() => {
-                    setShowRecommendations(false);
-                    onRecommendedSelect?.(item);
+                  className="relative h-1 bg-white/30 rounded-full cursor-pointer group"
+                  onClick={(e) => {
+                    const mediaElement = getCurrentMediaElement();
+                    if (mediaElement && duration) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const percent = (e.clientX - rect.left) / rect.width;
+                      const newTime = percent * duration;
+                      mediaElement.currentTime = newTime;
+                      setCurrentTime(newTime);
+                    }
                   }}
                 >
-                  <div className="relative overflow-hidden rounded-lg mb-2">
-                    <img 
-                      src={item.image} 
-                      alt={item.title}
-                      className="w-full h-32 object-cover group-hover:scale-105 transition-transform duration-200"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                      <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-red-600 rounded-full transition-all group-hover:bg-red-500"
+                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                  />
+                  <div 
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, marginLeft: '-6px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Control Buttons - Enhanced with Episode Navigation */}
+              <div className="flex items-center justify-between px-4 pb-4">
+                <div className="flex items-center gap-2">
+                  {previousEpisode && (
+                    <button
+                      onClick={playPreviousEpisode}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                      title="Previous Episode (Shift+Left)"
+                    >
+                      <SkipBack className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => skipTime(-10)}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                    title="Rewind 10s"
+                  >
+                    <Rewind className="w-5 h-5 text-white" />
+                  </button>
+
+                  <button
+                    onClick={togglePlayPause}
+                    className="p-3 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                  >
+                    {isPlaying ? (
+                      <Pause className="w-6 h-6 text-white" />
+                    ) : (
+                      <Play className="w-6 h-6 text-white ml-1" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => skipTime(10)}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                    title="Forward 10s"
+                  >
+                    <FastForward className="w-5 h-5 text-white" />
+                  </button>
+
+                  {nextEpisode && (
+                    <button
+                      onClick={playNextEpisode}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                      title="Next Episode (Shift+Right)"
+                    >
+                      <SkipForward className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={toggleMute}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                    >
+                      {isMuted ? (
+                        <VolumeX className="w-5 h-5 text-white" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                    
+                    {/* Volume Slider - Hidden on mobile */}
+                    <div className="hidden sm:block">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={isMuted ? 0 : volume}
+                        onChange={(e) => {
+                          const newVolume = parseInt(e.target.value);
+                          setVolume(newVolume);
+                          const mediaElement = getCurrentMediaElement();
+                          if (mediaElement) {
+                            mediaElement.volume = newVolume / 100;
+                            if (newVolume > 0) {
+                              setIsMuted(false);
+                              mediaElement.muted = false;
+                            }
+                          }
+                        }}
+                        className="w-20 h-1 bg-white/30 rounded-full appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${isMuted ? 0 : volume}%, rgba(255,255,255,0.3) ${isMuted ? 0 : volume}%, rgba(255,255,255,0.3) 100%)`
+                        }}
+                      />
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium line-clamp-2 text-white">{item.title}</h4>
-                  <div className="flex items-center gap-2 text-xs text-white/60 mt-1">
-                    {item.year && <span>{item.year}</span>}
-                    {item.duration && <span>{item.duration}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Keyboard shortcuts hint */}
-      {!isFullscreen && (
-        <div className="absolute bottom-4 left-4 text-white/50 text-xs z-50">
-          <div className="bg-black/50 backdrop-blur-sm rounded px-2 py-1">
-            Press F for fullscreen • Space to play/pause • ← → to seek
-          </div>
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                  >
+                    <Settings className="w-5 h-5 text-white" />
+                  </button>
+
+                  <button
+                    onClick={toggleFullscreen}
+                    className="p-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all"
+                    title={isFullscreen || isMobileFullscreen ? "Exit Fullscreen (F)" : "Enter Fullscreen (F)"}
+                  >
+                    {isFullscreen || isMobileFullscreen ? (
+                      <Minimize2 className="w-5 h-5 text-white" />
+                    ) : (
+                      <Maximize2 className="w-5 h-5 text-white" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Center Play/Pause Overlay */}
+          {!isImage && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <button
+                onClick={togglePlayPause}
+                className={`p-4 rounded-full bg-black/50 backdrop-blur-sm transition-all transform hover:scale-110 pointer-events-auto ${
+                  showControls ? 'opacity-0' : 'opacity-100'
+                }`}
+              >
+                {isPlaying ? (
+                  <Pause className="w-8 h-8 text-white" />
+                ) : (
+                  <Play className="w-8 h-8 text-white ml-1" />
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Enhanced Settings Panel with Episode Controls */}
+          {showSettings && (
+            <div className="absolute bottom-20 right-4 bg-black/90 backdrop-blur-sm rounded-lg p-4 min-w-48">
+              <h4 className="text-white font-semibold mb-3">Playback Settings</h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-white/70 text-sm block mb-1">Playback Speed</label>
+                  <select
+                    value={playbackRate}
+                    onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                    className="w-full bg-white/20 text-white rounded p-2 text-sm"
+                  >
+                    <option value={0.5}>0.5x</option>
+                    <option value={0.75}>0.75x</option>
+                    <option value={1}>Normal</option>
+                    <option value={1.25}>1.25x</option>
+                    <option value={1.5}>1.5x</option>
+                    <option value={2}>2x</option>
+                  </select>
+                </div>
+                {/* Volume control for mobile */}
+                <div className="sm:hidden">
+                  <label className="text-white/70 text-sm block mb-1">Volume</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => {
+                      const newVolume = parseInt(e.target.value);
+                      setVolume(newVolume);
+                      const mediaElement = getCurrentMediaElement();
+                      if (mediaElement) {
+                        mediaElement.volume = newVolume / 100;
+                        if (newVolume > 0) {
+                          setIsMuted(false);
+                          mediaElement.muted = false;
+                        }
+                      }
+                    }}
+                    className="w-full h-2 bg-white/30 rounded-full appearance-none cursor-pointer"
+                  />
+                </div>
+                {/* Autoplay Next Episode Toggle */}
+                {(nextEpisode || episodeList.length > 1) && (
+                  <div className="flex items-center justify-between">
+                    <label className="text-white/70 text-sm">Autoplay Next Episode</label>
+                    <button
+                      onClick={() => setAutoplayNext(!autoplayNext)}
+                      className={`w-10 h-5 rounded-full transition-colors ${
+                        autoplayNext ? 'bg-red-600' : 'bg-white/30'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                        autoplayNext ? 'translate-x-5' : 'translate-x-0.5'
+                      }`} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Episode List Overlay */}
+          {showEpisodeList && episodeList.length > 0 && (
+            <div className="absolute inset-0 bg-black/75 flex items-center justify-end">
+              <div className="bg-white h-full w-80 overflow-y-auto">
+                <div className="p-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Episodes</h3>
+                    <button
+                      onClick={() => setShowEpisodeList(false)}
+                      className="p-1 rounded-full hover:bg-gray-200"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  {episodeList[0]?.series_name && (
+                    <p className="text-sm text-gray-600 mt-1">{episodeList[0].series_name}</p>
+                  )}
+                </div>
+                <div className="p-2">
+                  {episodeList.map((episode, index) => (
+                    <button
+                      key={episode.relative_path}
+                      onClick={() => playEpisodeFromList(episode)}
+                      className={`w-full text-left p-3 rounded-lg mb-2 transition-colors ${
+                        episode.is_current ? 'bg-red-100 border border-red-300' : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium">
+                            {episode.season && episode.episode ? 
+                              `S${episode.season}E${episode.episode.toString().padStart(2, '0')}` :
+                              `Episode ${index + 1}`
+                            }
+                          </div>
+                          <div className="text-sm text-gray-600 truncate">{episode.title}</div>
+                        </div>
+                        {episode.is_current && (
+                          <div className="ml-2 w-2 h-2 bg-red-600 rounded-full flex-shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Next Episode Overlay */}
+          {showNextEpisode && nextEpisode && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
+                <div className="mb-4">
+                  <Clock className="w-12 h-12 mx-auto text-red-600 mb-2" />
+                  <h3 className="text-lg font-semibold mb-2">Up Next</h3>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="text-gray-600 mb-2">{nextEpisode.title}</p>
+                  {nextEpisode.season && nextEpisode.episode && (
+                    <p className="text-sm text-gray-500">
+                      Season {nextEpisode.season}, Episode {nextEpisode.episode}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowNextEpisode(false)}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={playNextEpisode}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Play Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recommendations Overlay */}
+          {showRecommendations && recommendedMedia.length > 0 && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">You might also like</h3>
+                  <button
+                    onClick={() => setShowRecommendations(false)}
+                    className="p-1 rounded-full hover:bg-gray-200"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {recommendedMedia.slice(0, 6).map((item, index) => (
+                    <div
+                      key={index}
+                      className="cursor-pointer group"
+                      onClick={() => {
+                        setShowRecommendations(false);
+                        onRecommendedSelect?.(item);
+                      }}
+                    >
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full aspect-[3/4] object-cover rounded-lg group-hover:scale-105 transition-transform"
+                      />
+                      <h4 className="text-sm font-medium mt-2 line-clamp-2">{item.title}</h4>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Click to show/hide controls */}
+          <div 
+            className="absolute inset-0 cursor-pointer"
+            onClick={() => setShowControls(!showControls)}
+            style={{ pointerEvents: showControls ? 'none' : 'auto' }}
+          />
         </div>
-      )}
+
+        {/* Close button for non-fullscreen mode */}
+        {!isFullscreen && !isMobileFullscreen && (
+          <button
+            onClick={handleClose}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-sm transition-all z-10"
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
